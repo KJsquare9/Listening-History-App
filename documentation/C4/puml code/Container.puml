@@ -1,0 +1,25 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Container Diagram — Listening Analysis System
+
+Person(user, "User", "Uploads listening history file, views charts")
+
+System_Boundary(sys, "Listening Analysis System") {
+
+    Container(spa, "Browser Frontend", "HTML + JS + D3.js", "Handles file upload, calls parse API, renders all visualisations client-side. Receives only enriched JSON — never handles raw musical attribute data.")
+
+    Container(api, "Parse & Enrich API", "Python / Flask", "Accepts raw listening history files. Routes to the correct parser. Looks up each track in the internal song dataset to attach VA and other attributes. Returns enriched normalised JSON. Stateless — holds no user data between requests.")
+
+    ContainerDb(song_db, "Song Dataset", "Flat files (CSV / XLSX)", "Internal dataset mapping track and artist names to musical attributes: valence, arousal, and any other scores. Maintained by the researcher. Read-only at runtime.")
+
+    ContainerDb(refdata, "Cohort Reference Data", "Flat files (CSV / XLSX)", "Listening histories of reference study participants annotated with depression scale scores. Read-only at runtime.")
+}
+
+Rel(user, spa, "Visits in browser, uploads file", "HTTPS")
+Rel(spa, api, "POST raw listening history file", "HTTP")
+Rel(api, spa, "Returns enriched listening events + cohort summaries", "JSON")
+Rel(api, song_db, "Looks up track attributes by name / artist", "File I/O")
+Rel(api, refdata, "Reads cohort listening histories and scale scores", "File I/O")
+
+@enduml

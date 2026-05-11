@@ -1,0 +1,37 @@
+@startuml C4_Component_SPA
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component Diagram — Browser Frontend (D3.js)
+
+Container_Boundary(spa, "Browser Frontend") {
+
+    Component(uploader, "File Upload Component", "HTML / JS", "Drag-and-drop or file picker. Posts raw listening history to parse API. Stores returned enriched JSON in app state.")
+
+    Component(state, "App State", "JS module", "Holds enriched user events and cohort data in memory for the session. Never persisted to disk or server.")
+
+    Component(viz_registry, "Visualisation Registry", "JS module", "Maps visualisation IDs to D3 modules. Drives tab/nav UI. New charts registered here.")
+
+    Component(va_trajectory, "V-A Trajectory Chart", "D3 module", "Plots track sequence as a path on the valence-arousal plane. Colour-encodes time progression.")
+
+    Component(va_timeseries, "V-A Time Series Chart", "D3 module", "Plots valence and arousal as separate time-series lines over the listening session.")
+
+    Component(cohort_compare, "Cohort Comparison Chart", "D3 module", "Overlays user listening patterns against high-depression and low-depression cohort distributions.")
+
+    Component(ms_played, "Listening Duration Chart", "D3 module", "Bar or stream chart of ms_played per track or time bucket.")
+
+    Component(placeholder, "[ Future Visualisation ]", "D3 module slot", "Any new D3 module dropped in and registered appears immediately as a new tab.")
+}
+
+Container(api, "Parse & Enrich API", "Flask")
+
+Rel(uploader, api, "POST raw file", "HTTP")
+Rel(api, uploader, "Returns enriched JSON")
+Rel(uploader, state, "Writes to app state")
+Rel(state, viz_registry, "Provides data to active chart")
+Rel(viz_registry, va_trajectory, "Mounts / unmounts")
+Rel(viz_registry, va_timeseries, "Mounts / unmounts")
+Rel(viz_registry, cohort_compare, "Mounts / unmounts")
+Rel(viz_registry, ms_played, "Mounts / unmounts")
+Rel(viz_registry, placeholder, "Mounts / unmounts")
+
+@enduml

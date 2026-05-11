@@ -1,0 +1,19 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title System Context — Music Listening Analysis Tool
+
+Person(user, "Researcher / User", "Uploads their listening history (tracks + timestamps) and views psychological visualisations")
+
+System(system, "Listening Analysis System", "Parses user listening history, looks up VA and other musical attributes from an internal dataset, and renders comparative visualisations against reference cohorts")
+
+System_Ext(spotify, "Spotify Takeout", "External data source — JSON export")
+System_Ext(ytmusic, "YT Music Takeout", "External data source — JSON export")
+System_Ext(generic, "Generic CSV / TSV", "User-exported listening data in tabular format")
+
+Rel(user, system, "Uploads listening history file, views visualisations", "HTTPS / browser")
+Rel(spotify, user, "User downloads their data export")
+Rel(ytmusic, user, "User downloads their data export")
+Rel(generic, user, "User prepares CSV export")
+
+@enduml

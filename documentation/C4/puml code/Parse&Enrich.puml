@@ -1,0 +1,40 @@
+@startuml C4_Component_API
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component Diagram — Parse & Enrich API (Flask)
+
+Container_Boundary(api, "Parse & Enrich API") {
+
+    Component(router, "Upload Router", "Flask Blueprint", "Accepts multipart file upload. Detects format from filename or MIME type. Delegates to parser registry.")
+
+    Component(registry, "Parser Registry", "Python module", "Maps format identifiers (spotify, ytmusic, csv, ...) to parser classes. New formats registered here with zero changes elsewhere.")
+
+    Component(spotify_parser, "Spotify Parser", "Parser plugin", "Reads Spotify StreamingHistory JSON. Outputs NormalisedEvent list: track, artist, timestamp, ms_played.")
+
+    Component(yt_parser, "YT Music Parser", "Parser plugin", "Reads YT Music Takeout JSON. Outputs NormalisedEvent list.")
+
+    Component(csv_parser, "Generic CSV Parser", "Parser plugin", "Reads tabular track / timestamp / ms_played data. Outputs NormalisedEvent list.")
+
+    Component(enricher, "Track Enricher", "Python module", "Takes NormalisedEvent list. For each event, queries the Song Dataset by track and artist name. Attaches valence, arousal, and any other available attributes. Unmatched tracks are flagged, not dropped.")
+
+    Component(cohort_loader, "Cohort Data Loader", "Python module", "Loads and pre-processes reference cohort listening histories and depression scale scores. Caches in memory on first load.")
+
+    Component(serialiser, "Response Serialiser", "Python module", "Combines enriched user events and cohort summary data into a single JSON payload for the frontend.")
+}
+
+ContainerDb(song_db, "Song Dataset", "Flat files")
+ContainerDb(refdata, "Cohort Reference Data", "Flat files")
+
+Rel(router, registry, "Looks up parser by format ID")
+Rel(registry, spotify_parser, "Instantiates on Spotify upload")
+Rel(registry, yt_parser, "Instantiates on YT Music upload")
+Rel(registry, csv_parser, "Instantiates on CSV upload")
+Rel(spotify_parser, enricher, "Passes NormalisedEvent list")
+Rel(yt_parser, enricher, "Passes NormalisedEvent list")
+Rel(csv_parser, enricher, "Passes NormalisedEvent list")
+Rel(enricher, song_db, "Looks up track attributes")
+Rel(cohort_loader, refdata, "Reads cohort files")
+Rel(enricher, serialiser, "Enriched user events")
+Rel(cohort_loader, serialiser, "Cohort summary data")
+
+@enduml
