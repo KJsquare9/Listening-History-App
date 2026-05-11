@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Listening History Atlas - User Mode</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/frontend/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  </head>
+  <body>
+    <div class="orb orb--one"></div>
+    <div class="orb orb--two"></div>
+    <div class="orb orb--three"></div>
+
+    <main class="app-shell">
+      <section class="hero panel">
+        <div class="hero__copy">
+          <div class="eyebrow">Music Listening Analysis Tool</div>
+          <h1>Turn a listening history file into a psychological map of the session.</h1>
+          <p>
+            Upload Spotify, YouTube Music, or tabular listening history and the app enriches each track with synthetic valence-arousal data,
+            then renders modern visual summaries against two reference listeners.
+          </p>
+          <div class="hero__actions">
+            <button class="button button--primary" data-action="demo">Load demo session</button>
+            <span class="status-pill" id="statusPill">Waiting for a file or demo load</span>
+          </div>
+        </div>
+        <div class="hero__panel panel panel--glass">
+          <div class="hero__metric">
+            <span class="metric__label">Supported formats</span>
+            <span class="metric__value">Spotify, YT Music, CSV/TSV</span>
+          </div>
+          <div class="hero__metric">
+            <span class="metric__label">Data retention</span>
+            <span class="metric__value">Session memory only</span>
+          </div>
+          <div class="hero__metric">
+            <span class="metric__label">Charts</span>
+            <span class="metric__value">Trajectory, time series, reference comparison, duration</span>
+          </div>
+          <div class="hero__sparkline" id="heroSparkline"></div>
+        </div>
+      </section>
+
+      <section class="dashboard">
+        <aside class="side-column">
+          <section class="panel upload-panel">
+            <div class="panel__header">
+              <div>
+                <div class="panel__eyebrow">Upload</div>
+                <h2>Drop your listening history here</h2>
+              </div>
+            </div>
+            <div class="dropzone" id="dropzone">
+              <input type="file" id="uploadInput" accept=".json,.csv,.tsv,application/json,text/csv,text/tab-separated-values" hidden />
+              <div class="dropzone__icon">+</div>
+              <p>Drag and drop a history export, or click to browse.</p>
+              <button class="button button--secondary" type="button" data-action="browse">Choose file</button>
+            </div>
+            <div class="upload-meta">
+              <div><span class="upload-meta__label">Current file</span><span class="upload-meta__value" id="fileName">Demo dataset</span></div>
+              <div><span class="upload-meta__label">Status</span><span class="upload-meta__value" id="uploadState">Ready</span></div>
+            </div>
+          </section>
+
+          <section class="panel summary-panel">
+            <div class="panel__header">
+              <div>
+                <div class="panel__eyebrow">Session summary</div>
+                <h2>Live metrics</h2>
+              </div>
+            </div>
+            <div class="stats-grid" id="summaryCards"></div>
+          </section>
+
+          <section class="panel insight-panel">
+            <div class="panel__header">
+              <div>
+                <div class="panel__eyebrow">Reference groups</div>
+                <h2>Reference comparison</h2>
+              </div>
+            </div>
+            <div class="cohort-stack" id="cohortStack"></div>
+          </section>
+        </aside>
+
+        <section class="workspace panel">
+          <div class="workspace__header">
+            <div>
+              <div class="panel__eyebrow">Visualisations</div>
+              <h2>Explore the listening session</h2>
+            </div>
+            <div class="tablist" id="vizTabs" role="tablist" aria-label="Visualisations"></div>
+          </div>
+          <div class="date-filter" id="dateFilter">
+            <div class="date-filter__title">Time window</div>
+            <label class="date-filter__field">
+              <span>Start date</span>
+              <input type="date" id="startDateInput" />
+            </label>
+            <label class="date-filter__field">
+              <span>End date</span>
+              <input type="date" id="endDateInput" />
+            </label>
+            <button class="button button--secondary date-filter__reset" type="button" id="resetDateFilter">Full range</button>
+            <div class="date-filter__message" id="dateFilterMessage"></div>
+          </div>
+          <div class="chart-frame" id="chartFrame">
+            <div class="empty-state" id="emptyState">
+              <div class="empty-state__badge">Demo ready</div>
+              <h3>Load a file or start with the demo session.</h3>
+              <p>The chart area will update once the API returns enriched events and reference summaries.</p>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/frontend/app.js"></script>
+  </body>
+</html>

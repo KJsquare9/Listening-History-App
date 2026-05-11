@@ -8,19 +8,38 @@ Users only need to provide their listening history. All musical attribute data i
 
 ## Overview
 
-The system is split into two parts:
+The system is split into two modes:
 
+### User Mode
+- Single user listening history analysis
 - **Flask API (Python)** — accepts listening history file uploads, routes them through a parser registry, looks up each track in the internal song dataset to attach valence, arousal, and other attributes, and returns a single enriched JSON payload. Stateless: no user data is stored.
 - **Browser frontend (HTML + D3.js)** — receives the enriched data and renders all visualisations client-side. Data lives only in session memory.
+
+### Researcher Mode
+- Multi-user listening history analysis and comparison
+- **Upload**: Drag-and-drop folder upload with metadata CSV file (Participant_ID required)
+- **Validation**: Automatic file-name-to-Participant_ID matching
+- **Analysis**: Distribution plots for metadata fields, multi-participant V-A trajectories, filtering by field and participant
+- See [RESEARCHER_MODE.md](RESEARCHER_MODE.md) for details
 
 ---
 
 ## Features
 
+### User Mode
 - V-A trajectory plot — track sequence as a path on the valence-arousal plane, colour-encoded by time
 - V-A time series — valence and arousal plotted over the listening session
 - Cohort comparison — user listening patterns overlaid against high-depression and low-depression reference distributions
 - Listening duration breakdown — ms played per track or time bucket
+
+### Researcher Mode
+- Multi-participant data upload with Participant_ID validation
+- Distribution plots for metadata fields (demographics, scores, etc.)
+- Multi-participant V-A trajectory visualization with legend
+- Interactive filtering by fields and participants
+- Support for mixed file formats (CSV, JSON, TSV)
+
+### Shared Features
 - Pluggable parser registry — add support for new file formats (Spotify, YT Music, CSV, etc.) by dropping in a single parser module
 - Pluggable visualisation registry — add new D3 charts by registering a single JS module
 
@@ -32,7 +51,8 @@ The system is split into two parts:
 .
 ├── api/
 │   ├── app.py                  # Flask app entry point
-│   ├── router.py               # Upload endpoint, format detection
+│   ├── router.py               # User mode endpoint, format detection
+│   ├── researcher.py           # Researcher mode endpoint (new)
 │   ├── registry.py             # Parser registry
 │   ├── parsers/
 │   │   ├── base.py             # NormalisedEvent schema / base class
@@ -44,16 +64,26 @@ The system is split into two parts:
 │   └── serialiser.py           # JSON response builder
 │
 ├── data/
-│   ├── songs.xlsx              # Internal song dataset: track/artist → valence, arousal, etc.
-│   └── cohorts/                # Reference listening histories with depression scale scores
-│       ├── high_depression/
-│       └── low_depression/
+│   ├── songs.csv               # Internal song dataset: track/artist → valence, arousal, etc.
+│   ├── cohorts/                # Reference listening histories with depression scale scores
+│   │   ├── high_depression.csv
+│   │   └── low_depression.csv
+│   └── research_demo/          # Demo researcher data (new)
+│       ├── participant_001.csv
+│       ├── participant_002.csv
+│       ├── participant_003.csv
+│       └── metadata.csv
 │
 ├── frontend/
-│   ├── index.html
-│   ├── app.js                  # App state, viz registry, tab routing
+│   ├── index.html              # Landing page (new)
+│   ├── user.html               # User mode (renamed from index.html)
+│   ├── researcher.html         # Researcher mode (new)
+│   ├── researcher.js           # Researcher mode logic (new)
+│   ├── app.js                  # User mode state and routing
 │   ├── uploader.js             # File upload component
+│   ├── styles.css              # Shared styles
 │   └── charts/
+│       ├── shared.js           # Shared chart utilities
 │       ├── va_trajectory.js    # V-A plane trajectory chart
 │       ├── va_timeseries.js    # V-A time series chart
 │       ├── cohort_compare.js   # Cohort comparison chart
@@ -64,8 +94,12 @@ The system is split into two parts:
 │   ├── test_enricher.py
 │   └── test_cohort_loader.py
 │
+├── documentation/              # C4 diagrams and architecture docs
+│
 ├── requirements.txt
-└── README.md
+├── README.md
+├── RESEARCHER_MODE.md          # Researcher mode documentation (new)
+└── FUNCTIONAL_REQUIREMENTS.md
 ```
 
 ---
@@ -162,10 +196,30 @@ python -m pytest
 
 ## Architecture
 
-The system follows a C4-style layered design:
+The system design has been documented in a C4-style layered design:
 
 - **Context** — user uploads a listening history file from any supported platform; the tool enriches it internally and visualises it with no data retention.
 - **Containers** — a stateless Flask API handles parsing and enrichment against internal datasets; a browser frontend handles all rendering.
 - **Components** — two registries (Python parser registry, JS visualisation registry) are the sole extension points. Adding new formats or charts requires touching only those registries and their respective plugin directories.
 
 Full C4 PlantUML diagrams are in `documentation/C4/puml code/`.
+
+---
+
+## Extending The App
+
+This project is intentionally built to be friendly to change. The main extension points are the parser registry on the backend and the visualisation registry on the frontend.
+
+### Add a new visualisation
+
+1. Create a new module in `frontend/charts/`.
+2. Export a `mount(container, data)` function and an `unmount()` function.
+3. Register the module in `frontend/app.js` so it appears as a new tab.
+
+### Add a new data format
+
+1. Create a parser in `api/parsers/` that converts the new file into `NormalisedEvent` objects.
+2. Register the parser in `api/registry.py` with a format id and detection rules.
+3. Make sure the parser returns the standard fields used by the enricher and frontend.
+
+If you follow those two patterns, the rest of the app should continue working without extra wiring.

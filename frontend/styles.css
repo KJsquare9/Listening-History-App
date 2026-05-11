@@ -800,7 +800,7 @@ p {
 
 .svg-axis text {
   fill: rgba(238, 244, 255, 0.76);
-  font-size: 12px;
+  font-size: 8px;
   font-family: "Manrope", sans-serif;
 }
 
@@ -843,6 +843,295 @@ p {
 .tooltip.is-visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.trajectory-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.trajectory-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 16px;
+  align-items: start;
+}
+
+.trajectory-sidebar {
+  display: grid;
+  gap: 12px;
+  align-self: stretch;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.trajectory-sidebar__section {
+  display: grid;
+  gap: 8px;
+}
+
+.trajectory-sidebar__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--soft);
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+}
+
+.trajectory-sidebar__row,
+.trajectory-sidebar__stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.trajectory-sidebar__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.trajectory-sidebar__swatch--average {
+  background: rgba(255, 166, 72, 0.9);
+  box-shadow: 0 0 0 4px rgba(255, 166, 72, 0.15);
+}
+
+.trajectory-sidebar__note {
+  color: var(--soft);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.trajectory-sidebar__stat strong {
+  color: var(--text);
+  font-weight: 700;
+  text-align: right;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trajectory-svg {
+  height: 280px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Legend for trajectory chart */
+.trajectory-legend {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(12, 23, 41, 0.85);
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 10px 12px;
+  border-radius: 10px;
+  max-width: 220px;
+  z-index: 5;
+}
+
+.trajectory-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.25) inset;
+}
+
+.legend-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trajectory-marker-label {
+  fill: rgba(238, 244, 255, 0.8);
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 600;
+}
+
+.trajectory-average-label {
+  fill: rgba(255, 166, 72, 0.92);
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 900px) {
+  .trajectory-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.trajectory-slider-wrapper {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.trajectory-speed-wrapper {
+  display: grid;
+  gap: 6px;
+}
+
+.trajectory-speed-label {
+  font-size: 0.7rem;
+  color: var(--soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.trajectory-speed-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(104, 210, 201, 0.3), rgba(104, 210, 201, 0.6));
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.trajectory-speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #68d2c9;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(104, 210, 201, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.trajectory-speed-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #68d2c9;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(104, 210, 201, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.trajectory-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(104, 210, 201, 0.3), rgba(104, 210, 201, 0.6));
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.trajectory-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #68d2c9;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(104, 210, 201, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.trajectory-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #68d2c9;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(104, 210, 201, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.trajectory-time-display {
+  font-size: 0.7rem;
+  color: var(--soft);
+  text-align: center;
+}
+
+.trajectory-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.trajectory-play-btn,
+.trajectory-reset-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.trajectory-play-btn:hover,
+.trajectory-reset-btn:hover {
+  transform: translateY(-1px);
+  color: var(--text);
+}
+
+.trajectory-song-display {
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(104, 210, 201, 0.1);
+  border: 1px solid rgba(104, 210, 201, 0.2);
+}
+
+.trajectory-song-info {
+  display: grid;
+  gap: 2px;
+}
+
+.trajectory-song-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.trajectory-song-artist {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.trajectory-song-values {
+  font-size: 0.7rem;
+  color: var(--soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 @keyframes drift {

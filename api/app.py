@@ -8,6 +8,7 @@ from api.cohort_loader import CohortLoader
 from api.enricher import SongDataset, TrackEnricher
 from api.registry import ParserRegistry
 from api.router import router
+from api.researcher import researcher_bp
 
 
 def create_app() -> Flask:
@@ -30,6 +31,7 @@ def create_app() -> Flask:
     app.config["COHORT_LOADER"] = CohortLoader(data_path / "cohorts", enricher)
 
     app.register_blueprint(router)
+    app.register_blueprint(researcher_bp)
 
     @app.get("/")
     def index() -> Response:

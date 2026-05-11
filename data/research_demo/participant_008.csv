@@ -1,0 +1,11 @@
+timestamp,artist,track,ms_played
+2024-01-08T07:00:00,The Beatles,Hey Jude,427500
+2024-01-08T08:30:00,Pink Floyd,Comfortably Numb,390000
+2024-01-08T10:00:00,Led Zeppelin,Stairway to Heaven,482000
+2024-01-08T11:45:00,Queen,Bohemian Rhapsody,354000
+2024-01-08T13:30:00,The Rolling Stones,Jumpin Jack Flash,245000
+2024-01-08T15:00:00,David Bowie,Space Oddity,300000
+2024-01-08T16:30:00,Jimi Hendrix,Purple Haze,173000
+2024-01-08T18:00:00,The Who,Baba O Riley,246000
+2024-01-08T19:30:00,Black Sabbath,Paranoid,170000
+2024-01-08T21:00:00,Deep Purple,Smoke on the Water,315000

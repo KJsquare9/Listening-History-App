@@ -14,10 +14,10 @@ class SongRecord:
     artist: str
     valence: float
     arousal: float
-    attributes: dict[str, str]
+    attributes: dict[str, str | float | int]
 
-    def as_dict(self) -> dict[str, str | float]:
-        payload: dict[str, str | float] = {
+    def as_dict(self) -> dict[str, str | float | int]:
+        payload: dict[str, str | float | int] = {
             "track": self.track,
             "artist": self.artist,
             "valence": self.valence,
@@ -45,11 +45,15 @@ class SongDataset:
                     continue
                 valence = float(row.get("valence", 0.0))
                 arousal = float(row.get("arousal", 0.0))
+                duration_value = row.get("duration_ms")
+                if duration_value in {None, ""}:
+                    duration_value = _estimate_duration_ms(row)
                 attributes = {
                     key: value
                     for key, value in row.items()
-                    if key not in {"track", "artist", "valence", "arousal"} and value not in {None, ""}
+                    if key not in {"track", "artist", "valence", "arousal", "duration_ms"} and value not in {None, ""}
                 }
+                attributes["duration_ms"] = duration_value
                 records.append(SongRecord(track=track, artist=artist, valence=valence, arousal=arousal, attributes=attributes))
         return cls(records)
 
@@ -74,6 +78,9 @@ class TrackEnricher:
                 enriched_events.append(event)
                 continue
 
+            if not _meets_minimum_play_threshold(event.ms_played, match.attributes.get("duration_ms")):
+                continue
+
             matched_count += 1
             event.valence = match.valence
             event.arousal = match.arousal
@@ -81,7 +88,7 @@ class TrackEnricher:
             event.attributes = match.as_dict()
             enriched_events.append(event)
 
-        total = len(events)
+        total = len(enriched_events)
         summary = {
             "total_events": total,
             "matched_events": matched_count,
@@ -90,3 +97,27 @@ class TrackEnricher:
             "total_ms_played": int(sum(event.ms_played for event in events)),
         }
         return enriched_events, summary
+
+
+def _estimate_duration_ms(row: dict[str, str]) -> int:
+    tempo_text = row.get("tempo") or row.get("energy") or "120"
+    try:
+        tempo = float(tempo_text)
+    except (TypeError, ValueError):
+        tempo = 120.0
+    return int(max(120000, round(tempo * 1800)))
+
+
+def _meets_minimum_play_threshold(ms_played: int, duration_value: str | float | int | None) -> bool:
+    if duration_value in {None, ""}:
+        return True
+
+    try:
+        duration_ms = int(float(duration_value))
+    except (TypeError, ValueError):
+        return True
+
+    if duration_ms <= 0:
+        return True
+
+    return ms_played >= (duration_ms / 2)

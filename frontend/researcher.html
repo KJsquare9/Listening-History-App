@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Researcher Mode - Listening History Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="/frontend/styles.css" />
+  <style>
+    .researcher-app {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    .researcher-header {
+      padding: var(--space-6);
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 18, 32, 0.5);
+    }
+
+    .researcher-header__content {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-5);
+    }
+
+    .researcher-header__title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .researcher-header__back {
+      appearance: none;
+      border: 1px solid var(--border-strong);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 140ms ease;
+    }
+
+    .researcher-header__back:hover {
+      color: var(--text);
+      border-color: var(--border);
+    }
+
+    .researcher-main {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .researcher-container {
+      width: min(1560px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: var(--space-6);
+      flex: 1;
+    }
+
+    .section {
+      margin-bottom: var(--space-7);
+    }
+
+    .section__title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: var(--space-4);
+    }
+
+    .upload-zone {
+      display: grid;
+      gap: var(--space-4);
+      padding: var(--space-6);
+      border-radius: var(--radius-xl);
+      background: linear-gradient(
+        180deg,
+        rgba(18, 29, 48, 0.76),
+        rgba(8, 15, 28, 0.72)
+      );
+      border: 2px dashed var(--border-strong);
+      text-align: center;
+      transition: all 200ms ease;
+    }
+
+    .upload-zone.is-dragging {
+      border-color: var(--accent);
+      background: rgba(104, 210, 201, 0.08);
+    }
+
+    .upload-zone__instructions {
+      display: grid;
+      gap: var(--space-3);
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .upload-zone__file-input {
+      display: none;
+    }
+
+    .upload-zone__button {
+      margin-top: var(--space-2);
+    }
+
+    .instruction-box {
+      padding: var(--space-4);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 166, 72, 0.08);
+      border: 1px solid rgba(255, 166, 72, 0.2);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .instruction-box__title {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: var(--space-2);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.8rem;
+    }
+
+    .instruction-box ul {
+      margin: 0;
+      padding-left: var(--space-4);
+      list-style: disc;
+    }
+
+    .instruction-box li {
+      margin-bottom: var(--space-1);
+    }
+
+    .status-message {
+      padding: var(--space-3);
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      margin-bottom: var(--space-4);
+    }
+
+    .status-message.success {
+      background: rgba(124, 240, 166, 0.15);
+      border: 1px solid rgba(124, 240, 166, 0.3);
+      color: #b8ffc8;
+    }
+
+    .status-message.error {
+      background: rgba(255, 139, 139, 0.15);
+      border: 1px solid rgba(255, 139, 139, 0.3);
+      color: #ffb8b8;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: var(--space-4);
+      padding: var(--space-5);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .control-group {
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    .control-label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+      color: var(--soft);
+    }
+
+    .control-select,
+    .control-input {
+      appearance: none;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .control-select:focus,
+    .control-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: var(--shadow-focus);
+    }
+
+    .checkbox-group {
+      display: grid;
+      gap: var(--space-2);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2);
+      border-radius: var(--radius-sm);
+      transition: background 140ms ease;
+    }
+
+    .checkbox-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
+    .checkbox-item label {
+      cursor: pointer;
+      font-size: 0.9rem;
+      flex: 1;
+    }
+
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: var(--space-5);
+      margin-top: var(--space-5);
+    }
+
+    .chart-panel {
+      padding: var(--space-5);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(
+        180deg,
+        rgba(18, 29, 48, 0.76),
+        rgba(8, 15, 28, 0.72)
+      );
+      border: 1px solid var(--border);
+    }
+
+    .chart-panel__title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: var(--space-3);
+    }
+
+    .empty-message {
+      text-align: center;
+      padding: var(--space-6);
+      color: var(--soft);
+    }
+
+    @media (max-width: 900px) {
+      [style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb orb--one"></div>
+  <div class="orb orb--two"></div>
+  <div class="orb orb--three"></div>
+
+  <div class="researcher-app">
+    <header class="researcher-header">
+      <div class="researcher-header__content">
+        <h1 class="researcher-header__title">Researcher Mode</h1>
+        <a href="/" class="researcher-header__back">← Back to Home</a>
+      </div>
+    </header>
+
+    <main class="researcher-main">
+      <div class="researcher-container">
+        <!-- Upload Section -->
+        <section class="section">
+          <h2 class="section__title">Step 1: Upload Research Data</h2>
+
+          <div id="statusMessage"></div>
+
+          <div class="instruction-box">
+            <div class="instruction-box__title">Required Format</div>
+            <ul>
+              <li>
+                <strong>Metadata CSV file</strong> with columns including
+                <code style="background: rgba(0, 0, 0, 0.3); padding: 2px 6px; border-radius: 4px"
+                  >Participant_ID</code
+                >
+                (required)
+              </li>
+              <li>Participant IDs must match your listening history file names (without extension)</li>
+              <li>Multiple listening history files (CSV, JSON, or mixed formats supported)</li>
+              <li>All files in a single folder upload</li>
+            </ul>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-5);">
+            <div class="upload-zone" id="uploadZone">
+              <div class="upload-zone__instructions">
+                <p style="font-weight: 700">Drag and drop your research folder here</p>
+                <p style="font-size: 0.9rem; color: var(--soft)">
+                  Or click to select files and metadata CSV
+                </p>
+              </div>
+              <input type="file" id="fileInput" class="upload-zone__file-input" webkitdirectory multiple />
+              <input type="file" id="csvInput" class="upload-zone__file-input" accept=".csv" />
+              <button class="button button--primary upload-zone__button" id="selectFilesBtn">
+                Select Files
+              </button>
+            </div>
+
+            <div style="display: grid; place-items: center; gap: var(--space-4); padding: var(--space-5); border-radius: var(--radius-lg); background: rgba(255, 166, 72, 0.08); border: 1px dashed rgba(255, 166, 72, 0.3);">
+              <div style="text-align: center;">
+                <p style="font-weight: 700; margin-bottom: var(--space-2);">Try the demo</p>
+                <p style="font-size: 0.9rem; color: var(--soft); margin-bottom: var(--space-3);">Load sample researcher data with 3 participants</p>
+              </div>
+              <button class="button button--secondary" id="demoBtn" style="width: 100%;">
+                Load Demo
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Analysis Controls -->
+        <section class="section" id="analysisSection" style="display: none">
+          <h2 class="section__title">Step 2: Configure Analysis</h2>
+
+          <div class="controls">
+            <div class="control-group">
+              <label class="control-label">Select Participants to Compare</label>
+              <div class="checkbox-group" id="participantCheckboxes"></div>
+            </div>
+
+            <div class="control-group">
+              <label class="control-label">Select Fields to Compare</label>
+              <div class="checkbox-group" id="fieldCheckboxes"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Analysis Results -->
+        <section class="section" id="resultsSection" style="display: none">
+          <h2 class="section__title">Analysis Results</h2>
+          <div class="analysis-grid" id="analysisGrid"></div>
+        </section>
+
+        <!-- Trajectory View -->
+        <section class="section" id="trajectorySection" style="display: none">
+          <h2 class="section__title">V-A Trajectory View</h2>
+          <div style="font-size: 0.9rem; color: var(--soft); margin-bottom: var(--space-4); padding: var(--space-3); background: rgba(104, 210, 201, 0.1); border-radius: 4px; border-left: 3px solid var(--accent);">
+            Use the participant checkboxes above to select which participants to display in the trajectory comparison.
+          </div>
+          <div id="trajectoryContainer" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-5); min-height: 600px"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="/frontend/researcher.js"></script>
+</body>
+</html>
