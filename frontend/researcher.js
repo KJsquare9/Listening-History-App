@@ -1,21 +1,23 @@
 // Researcher mode application
 const CONFIG = {
   PARTICIPANT_ID_FIELD: "Participant_ID",
+  DEFAULT_RANGE: { valenceMin: 0, valenceMax: 1, arousalMin: 0, arousalMax: 1 },
 };
 
-let state = {
+const state = {
+  data: null,
   metadata: [],
   participants: [],
   fields: [],
   selectedFields: [],
   selectedParticipants: [],
-  data: null,
+  range: { ...CONFIG.DEFAULT_RANGE },
+  activeRequestId: 0,
 };
 
 const elements = {
   uploadZone: document.getElementById("uploadZone"),
   fileInput: document.getElementById("fileInput"),
-  csvInput: document.getElementById("csvInput"),
   selectFilesBtn: document.getElementById("selectFilesBtn"),
   demoBtn: document.getElementById("demoBtn"),
   statusMessage: document.getElementById("statusMessage"),
@@ -23,20 +25,24 @@ const elements = {
   participantCheckboxes: document.getElementById("participantCheckboxes"),
   fieldCheckboxes: document.getElementById("fieldCheckboxes"),
   resultsSection: document.getElementById("resultsSection"),
+  summaryGrid: document.getElementById("summaryGrid"),
   analysisGrid: document.getElementById("analysisGrid"),
   trajectorySection: document.getElementById("trajectorySection"),
   trajectoryContainer: document.getElementById("trajectoryContainer"),
+  valenceMin: document.getElementById("valenceMin"),
+  valenceMax: document.getElementById("valenceMax"),
+  arousalMin: document.getElementById("arousalMin"),
+  arousalMax: document.getElementById("arousalMax"),
+  rangeMessage: document.getElementById("rangeMessage"),
+  resetResearchFilters: document.getElementById("resetResearchFilters"),
 };
 
-// File upload handling
-elements.selectFilesBtn.addEventListener("click", () => {
-  elements.fileInput.click();
-});
-
+elements.selectFilesBtn.addEventListener("click", () => elements.fileInput.click());
 elements.demoBtn.addEventListener("click", loadDemo);
+elements.fileInput.addEventListener("change", (event) => handleFiles(event.target.files));
 
-elements.uploadZone.addEventListener("dragover", (e) => {
-  e.preventDefault();
+elements.uploadZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
   elements.uploadZone.classList.add("is-dragging");
 });
 
@@ -44,74 +50,56 @@ elements.uploadZone.addEventListener("dragleave", () => {
   elements.uploadZone.classList.remove("is-dragging");
 });
 
-elements.uploadZone.addEventListener("drop", (e) => {
-  e.preventDefault();
+elements.uploadZone.addEventListener("drop", (event) => {
+  event.preventDefault();
   elements.uploadZone.classList.remove("is-dragging");
-  handleFiles(e.dataTransfer.items);
+  handleFiles(event.dataTransfer.files);
 });
 
-elements.fileInput.addEventListener("change", (e) => {
-  handleFiles(e.target.files);
+[elements.valenceMin, elements.valenceMax, elements.arousalMin, elements.arousalMax].forEach((input) => {
+  input.addEventListener("input", applyRangeInputs);
 });
+
+elements.resetResearchFilters.addEventListener("click", () => {
+  if (!state.data) return;
+  state.selectedParticipants = state.participants.map((participant) => participant.id);
+  state.selectedFields = chooseDefaultFields(state.fields, state.metadata);
+  state.range = { ...CONFIG.DEFAULT_RANGE };
+  renderControls();
+  updateAnalysis();
+});
+
+wireResizeHandling();
 
 async function handleFiles(fileList) {
+  const requestId = beginRequest("Processing research files...");
+
   try {
-    clearStatus();
-    const files = Array.from(fileList);
-
-    // Find CSV metadata file
-    const csvFile = files.find((f) => f.name.endsWith(".csv") && !f.webkitRelativePath.includes("/"));
-
-    if (!csvFile) {
-      showStatus("No metadata CSV file found in root of folder.", "error");
+    const files = Array.from(fileList ?? []).filter((file) => file?.name);
+    if (!files.length) {
+      showStatus("No files were selected.", "error");
       return;
     }
 
-    // Parse CSV
-    const csvText = await csvFile.text();
-    const metadata = parseCSV(csvText);
-
-    // Validate Participant_ID field
-    if (!metadata.length || !metadata[0].hasOwnProperty(CONFIG.PARTICIPANT_ID_FIELD)) {
-      showStatus(
-        `Metadata CSV must contain a "${CONFIG.PARTICIPANT_ID_FIELD}" column. Found columns: ${Object.keys(metadata[0] || {}).join(", ")}`,
-        "error"
-      );
+    const metadataFile = await findMetadataFile(files);
+    if (!metadataFile) {
+      showStatus(`No metadata CSV with a "${CONFIG.PARTICIPANT_ID_FIELD}" column was found.`, "error");
       return;
     }
 
-    // Get listening history files and validate against Participant_IDs
-    const listeningFiles = files.filter(
-      (f) => !f.name.endsWith(".csv") && !f.webkitRelativePath.includes(".csv")
-    );
+    const metadata = parseCSV(await metadataFile.text());
+    const participantIds = metadata.map((row) => row[CONFIG.PARTICIPANT_ID_FIELD]).filter(Boolean);
+    const listeningFiles = files.filter((file) => file !== metadataFile && isSupportedListeningFile(file));
+    const validation = validateResearchFiles(participantIds, listeningFiles);
 
-    const participantIds = new Set(metadata.map((row) => row[CONFIG.PARTICIPANT_ID_FIELD]));
-    const fileParticipants = new Set(
-      listeningFiles.map((f) => f.name.replace(/\.(csv|json)$/i, ""))
-    );
-
-    // Validate match
-    const missingFiles = Array.from(participantIds).filter((id) => !fileParticipants.has(id));
-    const extraFiles = Array.from(fileParticipants).filter((id) => !participantIds.has(id));
-
-    if (missingFiles.length > 0 || extraFiles.length > 0) {
-      let errorMsg = `Data validation failed:\n`;
-      if (missingFiles.length > 0) {
-        errorMsg += `Missing listening history files for: ${missingFiles.join(", ")}\n`;
-      }
-      if (extraFiles.length > 0) {
-        errorMsg += `Extra listening history files (not in metadata): ${extraFiles.join(", ")}\n`;
-      }
-      showStatus(errorMsg, "error");
+    if (!validation.valid) {
+      showStatus(validation.message, "error");
       return;
     }
 
-    showStatus(`Loaded ${metadata.length} participants with ${listeningFiles.length} listening history files.`, "success");
-
-    // Send to backend
     const formData = new FormData();
-    formData.append("metadata", csvFile);
-    listeningFiles.forEach((f) => formData.append("listening_files", f));
+    formData.append("metadata", metadataFile, basename(metadataFile));
+    listeningFiles.forEach((file) => formData.append("listening_files", file, basename(file)));
 
     const response = await fetch("/api/researcher/process", {
       method: "POST",
@@ -119,752 +107,694 @@ async function handleFiles(fileList) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      showStatus(error.error || "Backend processing failed", "error");
-      return;
-    }
-
-    state.data = await response.json();
-    state.metadata = metadata;
-    state.participants = Array.from(participantIds).sort();
-
-    // Extract non-Participant_ID fields
-    state.fields = Object.keys(metadata[0]).filter((k) => k !== CONFIG.PARTICIPANT_ID_FIELD);
-
-    initializeControls();
-    elements.analysisSection.style.display = "block";
-    elements.resultsSection.style.display = "block";
-    elements.trajectorySection.style.display = "block";
-
-    updateAnalysis();
-  } catch (error) {
-    console.error(error);
-    showStatus(`Upload error: ${error.message}`, "error");
-  }
-}
-
-async function loadDemo() {
-  try {
-    clearStatus();
-    showStatus("Loading demo data...", "success");
-
-    const response = await fetch("/api/researcher/demo");
-
-    if (!response.ok) {
-      const error = await response.json();
-      showStatus(error.error || "Failed to load demo data", "error");
+      const error = await safeJson(response);
+      showStatus(error.error || "Backend processing failed.", "error");
       return;
     }
 
     const data = await response.json();
-
-    showStatus(`Demo loaded: ${data.count} participants with ${data.metadata_fields.length} metadata fields.`, "success");
-
-    state.data = data;
-    state.metadata = data.participants.map((p) => ({ Participant_ID: p.id, ...p.metadata }));
-    state.participants = data.participants.map((p) => p.id).sort();
-    state.fields = data.metadata_fields;
-
-    initializeControls();
-    elements.analysisSection.style.display = "block";
-    elements.resultsSection.style.display = "block";
-    elements.trajectorySection.style.display = "block";
-
-    updateAnalysis();
+    if (!isCurrentRequest(requestId)) return;
+    applyDataset(data, "Uploaded research dataset");
+    showStatus(`Loaded ${data.count} participants from uploaded research files.`, "success");
   } catch (error) {
     console.error(error);
-    showStatus(`Demo load error: ${error.message}`, "error");
+    if (isCurrentRequest(requestId)) {
+      showStatus(`Upload error: ${error.message}`, "error");
+    }
+  } finally {
+    if (isCurrentRequest(requestId)) {
+      finishRequest();
+    }
   }
 }
 
-function parseCSV(text) {
-  const lines = text.trim().split("\n");
-  const headers = lines[0].split(",").map((h) => h.trim());
-  const rows = [];
+async function loadDemo() {
+  const requestId = beginRequest("Loading demo research dataset...");
 
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const values = lines[i].split(",").map((v) => v.trim());
-    const row = {};
-    headers.forEach((h, idx) => {
-      row[h] = values[idx] || "";
-    });
-    rows.push(row);
+  try {
+    const response = await fetch("/api/researcher/demo");
+    if (!response.ok) {
+      const error = await safeJson(response);
+      showStatus(error.error || "Failed to load demo data.", "error");
+      return;
+    }
+
+    const data = await response.json();
+    if (!isCurrentRequest(requestId)) return;
+    applyDataset(data, "Demo research dataset");
+    showStatus(`Demo loaded: ${data.count} participants with ${data.metadata_fields.length} metadata fields.`, "success");
+  } catch (error) {
+    console.error(error);
+    if (isCurrentRequest(requestId)) {
+      showStatus(`Demo load error: ${error.message}`, "error");
+    }
+  } finally {
+    if (isCurrentRequest(requestId)) {
+      finishRequest();
+    }
   }
-
-  return rows;
 }
 
-function initializeControls() {
-  // Participant checkboxes
-  const participantContainer = elements.participantCheckboxes;
-  participantContainer.innerHTML = "";
-  state.participants.forEach((p) => {
-    const div = document.createElement("div");
-    div.className = "checkbox-item";
+function beginRequest(message) {
+  const requestId = state.activeRequestId + 1;
+  state.activeRequestId = requestId;
+  showStatus(message, "success");
+  elements.demoBtn.disabled = true;
+  elements.selectFilesBtn.disabled = true;
+  return requestId;
+}
+
+function isCurrentRequest(requestId) {
+  return requestId === state.activeRequestId;
+}
+
+function finishRequest() {
+  elements.demoBtn.disabled = false;
+  elements.selectFilesBtn.disabled = false;
+}
+
+function applyDataset(data, sourceLabel) {
+  const participants = normalizeParticipants(data.participants ?? []);
+  state.data = { ...data, participants };
+  state.metadata = participants.map((participant) => ({
+    [CONFIG.PARTICIPANT_ID_FIELD]: participant.id,
+    ...(participant.metadata ?? {}),
+  }));
+  state.participants = participants;
+  state.fields = data.metadata_fields ?? inferMetadataFields(state.metadata);
+  state.selectedParticipants = participants.map((participant) => participant.id);
+  state.selectedFields = chooseDefaultFields(state.fields, state.metadata);
+  state.range = { ...CONFIG.DEFAULT_RANGE };
+
+  renderControls();
+  revealAnalysisSections();
+  updateAnalysis(sourceLabel);
+}
+
+function normalizeParticipants(participants) {
+  return [...participants]
+    .filter((participant) => participant?.id)
+    .map((participant) => ({
+      ...participant,
+      events: [...(participant.events ?? [])].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)),
+      metadata: participant.metadata ?? {},
+      summary: participant.summary ?? {},
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function revealAnalysisSections() {
+  elements.analysisSection.hidden = false;
+  elements.resultsSection.hidden = false;
+  elements.trajectorySection.hidden = false;
+}
+
+function renderControls() {
+  renderParticipantControls();
+  renderFieldControls();
+  syncRangeInputs();
+}
+
+function renderParticipantControls() {
+  elements.participantCheckboxes.replaceChildren();
+
+  if (!state.participants.length) {
+    elements.participantCheckboxes.innerHTML = '<div class="empty-message empty-message--compact">No participants available.</div>';
+    return;
+  }
+
+  state.participants.forEach((participant) => {
+    const stats = computeParticipantStats(participant);
+    const label = document.createElement("label");
+    label.className = "checkbox-item researcher-choice";
+
     const input = document.createElement("input");
     input.type = "checkbox";
-    input.id = `participant-${p}`;
-    input.value = p;
-    input.checked = true; // All participants selected by default
-    input.addEventListener("change", (e) => {
-      state.selectedParticipants = Array.from(
-        participantContainer.querySelectorAll("input:checked")
-      ).map((i) => i.value);
+    input.value = participant.id;
+    input.checked = state.selectedParticipants.includes(participant.id);
+    input.addEventListener("change", () => {
+      state.selectedParticipants = Array.from(elements.participantCheckboxes.querySelectorAll("input:checked")).map((node) => node.value);
       updateAnalysis();
     });
-    const label = document.createElement("label");
-    label.htmlFor = `participant-${p}`;
-    label.textContent = p;
-    div.append(input, label);
-    participantContainer.append(div);
-  });
-  
-  // Initialize selectedParticipants with all participants
-  state.selectedParticipants = state.participants.slice();
 
-  // Field checkboxes
-  const fieldContainer = elements.fieldCheckboxes;
-  fieldContainer.innerHTML = "";
+    const copy = document.createElement("span");
+    copy.innerHTML = `<b>${escapeHtml(participant.id)}</b><small>${stats.matchedEvents}/${stats.totalEvents} matched · ${formatRatio(stats.matchRate)}</small>`;
+
+    label.append(input, copy);
+    elements.participantCheckboxes.append(label);
+  });
+}
+
+function renderFieldControls() {
+  elements.fieldCheckboxes.replaceChildren();
+
+  if (!state.fields.length) {
+    elements.fieldCheckboxes.innerHTML = '<div class="empty-message empty-message--compact">No metadata fields available.</div>';
+    return;
+  }
+
   state.fields.forEach((field) => {
-    const div = document.createElement("div");
-    div.className = "checkbox-item";
+    const type = getFieldType(field, state.metadata);
+    const label = document.createElement("label");
+    label.className = "checkbox-item researcher-choice";
+
     const input = document.createElement("input");
     input.type = "checkbox";
-    input.id = `field-${field}`;
     input.value = field;
-    input.addEventListener("change", (e) => {
-      if (e.target.checked) {
-        state.selectedFields.push(field);
-      } else {
-        state.selectedFields = state.selectedFields.filter((f) => f !== field);
-      }
+    input.checked = state.selectedFields.includes(field);
+    input.addEventListener("change", () => {
+      state.selectedFields = Array.from(elements.fieldCheckboxes.querySelectorAll("input:checked")).map((node) => node.value);
       updateAnalysis();
     });
-    const label = document.createElement("label");
-    label.htmlFor = `field-${field}`;
-    label.textContent = field;
-    div.append(input, label);
-    fieldContainer.append(div);
+
+    const copy = document.createElement("span");
+    copy.innerHTML = `<b>${escapeHtml(field)}</b><small>${type}</small>`;
+
+    label.append(input, copy);
+    elements.fieldCheckboxes.append(label);
   });
 }
 
-function updateAnalysis() {
-  if (!state.data) return;
-
-  const filteredData = {
-    ...state.data,
-    participants: state.selectedParticipants.length > 0
-      ? state.data.participants.filter((p) => state.selectedParticipants.includes(p.id))
-      : state.data.participants,
+function applyRangeInputs() {
+  const nextRange = {
+    valenceMin: clampNumber(elements.valenceMin.value, 0, 1),
+    valenceMax: clampNumber(elements.valenceMax.value, 0, 1),
+    arousalMin: clampNumber(elements.arousalMin.value, 0, 1),
+    arousalMax: clampNumber(elements.arousalMax.value, 0, 1),
   };
 
-  // Render combined normalized distribution if fields selected
-  if (state.selectedFields.length > 0) {
-    renderCombinedDistribution(filteredData, state.selectedFields);
-  } else {
-    elements.analysisGrid.innerHTML = '<div class="empty-message">Select fields to analyze</div>';
+  if (nextRange.valenceMin > nextRange.valenceMax || nextRange.arousalMin > nextRange.arousalMax) {
+    elements.rangeMessage.textContent = "Minimum values cannot be greater than maximum values.";
+    elements.rangeMessage.classList.add("is-error");
+    return;
   }
 
-  // Render trajectories with selected participants
+  state.range = nextRange;
+  elements.rangeMessage.classList.remove("is-error");
+  elements.rangeMessage.textContent = describeRange(nextRange);
+  updateAnalysis();
+}
+
+function syncRangeInputs() {
+  elements.valenceMin.value = state.range.valenceMin;
+  elements.valenceMax.value = state.range.valenceMax;
+  elements.arousalMin.value = state.range.arousalMin;
+  elements.arousalMax.value = state.range.arousalMax;
+  elements.rangeMessage.classList.remove("is-error");
+  elements.rangeMessage.textContent = describeRange(state.range);
+}
+
+function updateAnalysis(sourceLabel = null) {
+  if (!state.data) return;
+
+  const filteredData = getFilteredData();
+  renderResearchSummary(filteredData, sourceLabel);
+  renderMetadataAnalysis(filteredData, state.selectedFields);
   renderTrajectories(filteredData);
 }
 
-function renderCombinedDistribution(data, fields) {
-  elements.analysisGrid.innerHTML = "";
+function getFilteredData() {
+  const selectedIds = new Set(state.selectedParticipants);
+  const participants = state.data.participants
+    .filter((participant) => selectedIds.has(participant.id))
+    .map((participant) => ({
+      ...participant,
+      filteredEvents: (participant.events ?? []).filter((event) => eventInEmotionalRange(event, state.range)),
+    }));
 
-  if (fields.length === 0) {
-    elements.analysisGrid.innerHTML = '<div class="empty-message">Select fields to analyze</div>';
+  return { ...state.data, participants };
+}
+
+function eventInEmotionalRange(event, range) {
+  if (!event.matched || event.valence == null || event.arousal == null) return false;
+  const valence = Number(event.valence);
+  const arousal = Number(event.arousal);
+  return (
+    Number.isFinite(valence) &&
+    Number.isFinite(arousal) &&
+    valence >= range.valenceMin &&
+    valence <= range.valenceMax &&
+    arousal >= range.arousalMin &&
+    arousal <= range.arousalMax
+  );
+}
+
+function renderResearchSummary(data, sourceLabel) {
+  const stats = computeAggregateStats(data.participants);
+  const cards = [
+    { label: "Participants", value: stats.participantCount, hint: sourceLabel ?? "Selected research sample" },
+    { label: "Matched tracks", value: `${stats.matchedEvents}/${stats.totalEvents}`, hint: `${formatRatio(stats.matchRate)} usable for V-A analysis` },
+    { label: "Mean V/A", value: `${formatNumber(stats.meanValence)}/${formatNumber(stats.meanArousal)}`, hint: "Average emotional coordinate" },
+    { label: "Volatility", value: formatNumber(stats.meanVolatility), hint: "Mean step distance between matched plays" },
+  ];
+
+  elements.summaryGrid.replaceChildren();
+  cards.forEach((card) => {
+    const node = document.createElement("article");
+    node.className = "stat-card research-stat";
+    node.innerHTML = `
+      <span class="stat-card__label">${card.label}</span>
+      <span class="stat-card__value">${card.value}</span>
+      <span class="stat-card__hint">${card.hint}</span>
+    `;
+    elements.summaryGrid.append(node);
+  });
+}
+
+function renderMetadataAnalysis(data, fields) {
+  elements.analysisGrid.replaceChildren();
+
+  if (!data.participants.length) {
+    elements.analysisGrid.innerHTML = '<div class="empty-message">No participants selected. Select at least one participant to analyze.</div>';
     return;
   }
 
-  const panel = document.createElement("div");
-  panel.className = "chart-panel";
-  panel.style.gridColumn = "1 / -1";
-  
-  const title = document.createElement("div");
-  title.className = "chart-panel__title";
-  title.textContent = `Field Distribution (Normalized 0-1 Scale)`;
-  
-  const noteDiv = document.createElement("div");
-  noteDiv.style.fontSize = "0.85rem";
-  noteDiv.style.color = "var(--soft)";
-  noteDiv.style.marginBottom = "var(--space-3)";
-  noteDiv.style.padding = "var(--space-2) var(--space-3)";
-  noteDiv.style.background = "rgba(104, 210, 201, 0.08)";
-  noteDiv.style.borderRadius = "4px";
-  noteDiv.textContent = "All values normalized to 0-1 range for comparison across different scales.";
-  
-  panel.append(title, noteDiv);
-  
-  // Create CSS-based distribution chart
-  renderDistributionBars(data, fields, panel);
-  
-  elements.analysisGrid.append(panel);
-}
+  if (!fields.length) {
+    elements.analysisGrid.innerHTML = '<div class="empty-message">Select metadata fields to compare participant groups.</div>';
+    return;
+  }
 
-function renderDistributionBars(data, fields, container) {
-  const accentColors = ["#68d2c9", "#f2b66d", "#ff8b8b", "#7cf0a6", "#b19cd9", "#ffa07a", "#87ceeb", "#ffd700", "#ff69b4", "#00ff7f"];
-  
-  // Normalize each field
-  const normalizedSeries = fields.map((field, idx) => {
-    const values = data.participants.map((p) => {
-      const meta = state.metadata.find((m) => m[CONFIG.PARTICIPANT_ID_FIELD] === p.id);
-      return meta ? parseFloat(meta[field]) : null;
-    }).filter((v) => v !== null && !isNaN(v));
-    
-    if (values.length === 0) return null;
-    
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min || 1;
-    
-    return {
-      field,
-      color: accentColors[idx % accentColors.length],
-      normalized: values.map((v) => (v - min) / range)
-    };
-  }).filter(Boolean);
-  
-  if (normalizedSeries.length === 0) return;
-  
-  // Create bins
-  const binCount = 10;
-  const bins = Array(binCount).fill(0).map((_, i) => ({
-    min: i / binCount,
-    max: (i + 1) / binCount,
-    counts: {}
-  }));
-  
-  normalizedSeries.forEach((series) => {
-    bins.forEach((bin) => {
-      bin.counts[series.field] = series.normalized.filter(
-        (v) => v >= bin.min && v < bin.max
-      ).length;
-    });
-  });
-  
-  const maxCount = Math.max(...bins.map(b => Math.max(...Object.values(b.counts))));
-  
-  // Create chart container
-  const chartContainer = document.createElement("div");
-  chartContainer.style.cssText = `
-    width: 100%;
-    height: 400px;
-    display: flex;
-    align-items: flex-end;
-    gap: 4px;
-    padding: 20px;
-    background: rgba(255,255,255,0.02);
-    border-radius: 8px;
-    margin-bottom: 20px;
-  `;
-  
-  // Create bars
-  bins.forEach((bin, binIdx) => {
-    const barGroup = document.createElement("div");
-    barGroup.style.cssText = `
-      flex: 1;
-      display: flex;
-      align-items: flex-end;
-      gap: 1px;
-      height: 100%;
+  fields.forEach((field) => {
+    const panel = document.createElement("article");
+    panel.className = "chart-panel metadata-panel";
+    const type = getFieldType(field, state.metadata);
+    panel.innerHTML = `
+      <div class="chart-panel__title">${escapeHtml(field)}</div>
+      <div class="chart-panel__note">${type === "numeric" ? "Normalized distribution across selected participants." : "Category counts across selected participants."}</div>
     `;
-    
-    normalizedSeries.forEach((series) => {
-      const count = bin.counts[series.field] || 0;
-      const barHeight = (count / maxCount) * 100;
-      
-      const bar = document.createElement("div");
-      bar.style.cssText = `
-        flex: 1;
-        height: ${barHeight}%;
-        background: ${series.color};
-        opacity: 0.8;
-        border-radius: 2px 2px 0 0;
-        transition: opacity 0.2s;
-      `;
-      bar.title = `${series.field}: ${count}`;
-      barGroup.append(bar);
-    });
-    
-    chartContainer.append(barGroup);
+
+    if (type === "numeric") {
+      renderNumericField(panel, data.participants, field);
+    } else {
+      renderCategoricalField(panel, data.participants, field);
+    }
+
+    elements.analysisGrid.append(panel);
   });
-  
-  // Create legend
-  const legend = document.createElement("div");
-  legend.style.cssText = `
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-    padding: 0 20px;
-    margin-bottom: 20px;
-  `;
-  
-  normalizedSeries.forEach((series) => {
-    const item = document.createElement("div");
-    item.style.cssText = `display: flex; align-items: center; gap: 8px; font-size: 0.9rem;`;
-    
-    const box = document.createElement("div");
-    box.style.cssText = `width: 12px; height: 12px; background: ${series.color}; border-radius: 2px;`;
-    
-    const label = document.createElement("span");
-    label.textContent = series.field;
-    label.style.color = "var(--text)";
-    
-    item.append(box, label);
-    legend.append(item);
-  });
-  
-  container.append(chartContainer, legend);
 }
 
-function renderNormalizedDistribution(svg, data, fields) {
-  // Extract and normalize values for each field
-  const normalizedSeries = fields.map((field) => {
-    const values = data.participants
-      .map((p) => {
-        const meta = state.metadata.find((m) => m[CONFIG.PARTICIPANT_ID_FIELD] === p.id);
-        return meta ? parseFloat(meta[field]) : null;
-      })
-      .filter((v) => v !== null && !isNaN(v));
+function renderNumericField(panel, participants, field) {
+  const values = participants
+    .map((participant) => ({ id: participant.id, value: parseFloat(participant.metadata?.[field]) }))
+    .filter((entry) => Number.isFinite(entry.value));
 
-    if (values.length === 0) return null;
-
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min || 1;
-
-    const normalized = values.map((v) => (v - min) / range);
-
-    return {
-      field,
-      normalized,
-      min,
-      max,
-    };
-  }).filter(Boolean);
-
-  if (normalizedSeries.length === 0) return;
-
-  const margin = { top: 20, right: 60, bottom: 40, left: 50 };
-  const width = svg.parentElement?.clientWidth || 800;
-  const height = 400;
-
-  // Create bins (0-1 scale, 10 bins)
-  const binCount = 10;
-  const binSize = 1 / binCount;
-
-  // Initialize bins for each field
-  const bins = Array.from({ length: binCount }, (_, i) => {
-    const binMin = i * binSize;
-    const binMax = (i + 1) * binSize;
-    const counts = {};
-    normalizedSeries.forEach((series) => {
-      counts[series.field] = series.normalized.filter(
-        (v) => v >= binMin && v < binMax
-      ).length;
-    });
-    return { binMin, binMax, counts };
-  });
-
-  const maxCount = Math.max(
-    ...normalizedSeries.map((s) =>
-      Math.max(...bins.map((b) => b.counts[s.field] || 0))
-    )
-  );
-
-  console.log("Distribution Debug:", {
-    binCount: bins.length,
-    normalizedSeries: normalizedSeries.length,
-    maxCount,
-    width,
-    height,
-    marginsLeft: margin.left,
-    marginsRight: margin.right,
-    firstBinCounts: bins[0]?.counts
-  });
-
-  const x = d3
-    .scaleLinear()
-    .domain([0, 1])
-    .range([margin.left, width - margin.right]);
-
-  const y = d3
-    .scaleLinear()
-    .domain([0, maxCount])
-    .range([height - margin.bottom, margin.top]);
-
-  const colors = d3.schemeCategory10;
-  const accentColors = ["#68d2c9", "#f2b66d", "#ff8b8b", "#7cf0a6", "#b19cd9", "#ffa07a", "#87ceeb", "#ffd700", "#ff69b4", "#00ff7f"];
-
-  // Clear SVG and set viewBox
-  d3.select(svg).selectAll("*").remove();
-
-  const svgElement = d3
-    .select(svg)
-    .attr("viewBox", `0 0 ${width} ${height}`)
-    .style("overflow", "visible");
-
-  // Draw bars for each field
-  let barCount = 0;
-  normalizedSeries.forEach((series, seriesIdx) => {
-    const color = accentColors[seriesIdx % accentColors.length];
-    const barWidth = (binSize * (width - margin.left - margin.right)) / (normalizedSeries.length + 0.5);
-    const offset = barWidth * seriesIdx;
-
-    console.log(`Series ${seriesIdx} (${series.field}): barWidth=${barWidth}, offset=${offset}`);
-
-    bins.forEach((bin, binIdx) => {
-      const count = bin.counts[series.field] || 0;
-      const xPos = x(bin.binMin) + offset;
-      const yPos = y(count);
-      const rectHeight = height - margin.bottom - y(count);
-      
-      if (binIdx === 0) {
-        console.log(`  Bin 0: count=${count}, xPos=${xPos}, yPos=${yPos}, width=${barWidth}, height=${rectHeight}`);
-      }
-      
-      svgElement
-        .append("rect")
-        .attr("x", xPos)
-        .attr("y", yPos)
-        .attr("width", barWidth)
-        .attr("height", rectHeight)
-        .attr("fill", color)
-        .attr("fill-opacity", 0.8);
-      
-      barCount++;
-    });
-  });
-  
-  console.log(`Total bars drawn: ${barCount}`);
-
-  // X axis - manual rendering
-  svgElement.append("g").attr("transform", `translate(0,${height - margin.bottom})`);
-  const xAxisGroup = svgElement.append("g").attr("transform", `translate(0,${height - margin.bottom})`);
-  
-  for (let i = 0; i <= 10; i++) {
-    const val = i / 10;
-    xAxisGroup
-      .append("line")
-      .attr("x1", x(val))
-      .attr("y1", 0)
-      .attr("x2", x(val))
-      .attr("y2", 5)
-      .attr("stroke", "rgba(238, 244, 255, 0.4)")
-      .attr("stroke-width", 1);
-    
-    xAxisGroup
-      .append("text")
-      .attr("x", x(val))
-      .attr("y", 20)
-      .attr("text-anchor", "middle")
-      .style("font-size", "11px")
-      .style("fill", "rgba(238, 244, 255, 0.6)")
-      .text(val.toFixed(1));
+  if (!values.length) {
+    panel.insertAdjacentHTML("beforeend", '<div class="empty-message empty-message--compact">No numeric values available.</div>');
+    return;
   }
 
-  // Y axis - manual rendering
-  const yAxisGroup = svgElement.append("g").attr("transform", `translate(${margin.left},0)`);
-  const yTicks = Math.min(5, maxCount);
-  for (let i = 0; i <= yTicks; i++) {
-    const val = (i * maxCount) / yTicks;
-    yAxisGroup
-      .append("line")
-      .attr("x1", -5)
-      .attr("y1", y(val))
-      .attr("x2", 0)
-      .attr("y2", y(val))
-      .attr("stroke", "rgba(238, 244, 255, 0.4)")
-      .attr("stroke-width", 1);
-    
-    yAxisGroup
-      .append("text")
-      .attr("x", -10)
-      .attr("y", y(val) + 3)
-      .attr("text-anchor", "end")
-      .style("font-size", "11px")
-      .style("fill", "rgba(238, 244, 255, 0.6)")
-      .text(Math.round(val));
-  }
+  const rawValues = values.map((entry) => entry.value);
+  const min = Math.min(...rawValues);
+  const max = Math.max(...rawValues);
+  const mean = rawValues.reduce((sum, value) => sum + value, 0) / rawValues.length;
+  const range = max - min || 1;
+  const binCount = 8;
+  const bins = Array.from({ length: binCount }, (_, index) => ({
+    label: `${Math.round((index / binCount) * 100)}-${Math.round(((index + 1) / binCount) * 100)}%`,
+    count: 0,
+  }));
 
-  // X axis label
-  svgElement
-    .append("text")
-    .attr("x", margin.left + (width - margin.left - margin.right) / 2)
-    .attr("y", height - 5)
-    .attr("text-anchor", "middle")
-    .style("font-size", "12px")
-    .style("fill", "rgba(238, 244, 255, 0.6)")
-    .text("Normalized Value");
-
-  // Y axis label
-  svgElement
-    .append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -(height - margin.top - margin.bottom) / 2 - margin.top)
-    .attr("y", 15)
-    .attr("text-anchor", "middle")
-    .style("font-size", "12px")
-    .style("fill", "rgba(238, 244, 255, 0.6)")
-    .text("Count");
-
-  // Legend
-  normalizedSeries.forEach((series, idx) => {
-    const color = colors[idx % colors.length];
-    svgElement
-      .append("rect")
-      .attr("x", width - margin.right + 10)
-      .attr("y", margin.top + idx * 20)
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("fill", color)
-      .attr("fill-opacity", 0.7);
-
-    svgElement
-      .append("text")
-      .attr("x", width - margin.right + 30)
-      .attr("y", margin.top + idx * 20 + 10)
-      .style("font-size", "11px")
-      .style("fill", color)
-      .text(series.field);
+  values.forEach((entry) => {
+    const normalized = (entry.value - min) / range;
+    const index = Math.min(binCount - 1, Math.floor(normalized * binCount));
+    bins[index].count += 1;
   });
+
+  const maxCount = Math.max(1, ...bins.map((bin) => bin.count));
+  const chart = document.createElement("div");
+  chart.className = "research-bars";
+  bins.forEach((bin) => {
+    const bar = document.createElement("div");
+    bar.className = "research-bar";
+    bar.style.height = `${Math.max(4, (bin.count / maxCount) * 100)}%`;
+    bar.title = `${bin.label}: ${bin.count}`;
+    chart.append(bar);
+  });
+
+  const stats = document.createElement("div");
+  stats.className = "research-mini-stats";
+  stats.innerHTML = `
+    <div><span>Min</span><b>${formatNumber(min)}</b></div>
+    <div><span>Mean</span><b>${formatNumber(mean)}</b></div>
+    <div><span>Max</span><b>${formatNumber(max)}</b></div>
+  `;
+  panel.append(chart, stats);
+}
+
+function renderCategoricalField(panel, participants, field) {
+  const counts = new Map();
+  participants.forEach((participant) => {
+    const value = participant.metadata?.[field] || "Unknown";
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  });
+
+  const maxCount = Math.max(1, ...counts.values());
+  const list = document.createElement("div");
+  list.className = "category-list";
+  [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .forEach(([label, count]) => {
+      const row = document.createElement("div");
+      row.className = "category-row";
+      row.innerHTML = `
+        <span>${escapeHtml(label)}</span>
+        <div class="category-row__bar"><i style="width:${(count / maxCount) * 100}%"></i></div>
+        <b>${count}</b>
+      `;
+      list.append(row);
+    });
+  panel.append(list);
 }
 
 function renderTrajectories(data) {
-  elements.trajectoryContainer.innerHTML = "";
+  elements.trajectoryContainer.replaceChildren();
 
-  if (data.participants.length === 0) {
-    elements.trajectoryContainer.innerHTML = '<div class="empty-message">No participants selected</div>';
+  if (!data.participants.length) {
+    elements.trajectoryContainer.innerHTML = '<div class="empty-message">No participants selected. The trajectory view needs at least one selected participant.</div>';
     return;
   }
 
-  const margin = { top: 30, right: 80, bottom: 40, left: 50 };
-  const containerWidth = elements.trajectoryContainer.clientWidth || 800;
-  const size = Math.min(500, containerWidth - 80);
+  const drawable = data.participants
+    .map((participant) => ({
+      participant,
+      events: participant.filteredEvents ?? [],
+      stats: computeParticipantStats(participant, participant.filteredEvents ?? []),
+    }))
+    .filter((entry) => entry.events.length >= 2);
+
+  if (!drawable.length) {
+    elements.trajectoryContainer.innerHTML = '<div class="empty-message">No selected participant has at least two matched tracks inside the current emotional range.</div>';
+    renderSkippedParticipants(data.participants);
+    return;
+  }
+
+  const shell = document.createElement("div");
+  shell.className = "trajectory-layout";
+  const chartNode = document.createElement("div");
+  chartNode.className = "trajectory-chart";
+  const sideNode = document.createElement("aside");
+  sideNode.className = "trajectory-side";
+  shell.append(chartNode, sideNode);
+  elements.trajectoryContainer.append(shell);
+
+  const margin = { top: 26, right: 24, bottom: 54, left: 60 };
+  const containerWidth = Math.max(320, chartNode.clientWidth || elements.trajectoryContainer.clientWidth || 800);
+  const size = Math.max(300, Math.min(680, containerWidth - margin.left - margin.right));
   const width = size + margin.left + margin.right;
   const height = size + margin.top + margin.bottom;
 
+  const svg = d3.select(chartNode).append("svg").attr("viewBox", `0 0 ${width} ${height}`).classed("chart-svg", true);
   const x = d3.scaleLinear().domain([0, 1]).range([margin.left, margin.left + size]);
   const y = d3.scaleLinear().domain([0, 1]).range([margin.top + size, margin.top]);
+  const colors = ["#68d2c9", "#f2b66d", "#ff8b8b", "#7cf0a6", "#b19cd9", "#87ceeb", "#ffa07a", "#ffd700", "#ff69b4", "#00ff7f"];
 
-  const svg = d3
-    .select(elements.trajectoryContainer)
-    .append("svg")
-    .attr("viewBox", `0 0 ${width} ${height}`)
-    .style("max-width", "100%")
-    .style("height", "auto");
+  drawTrajectoryScaffold(svg, { x, y, margin, size, width, height });
 
-  // Create a separate HTML legend container for nicer styling
-  const legendContainer = document.createElement("div");
-  legendContainer.className = "trajectory-legend";
-  // Position legend at right of the plot
-  elements.trajectoryContainer.appendChild(legendContainer);
-  // Grid and axes - manual rendering
-  for (let i = 0; i <= 5; i++) {
-    const val = i / 5;
-    // Vertical grid lines
-    svg
-      .append("line")
-      .attr("x1", x(val))
-      .attr("y1", margin.top)
-      .attr("x2", x(val))
-      .attr("y2", margin.top + size)
-      .attr("stroke-dasharray", "2,2")
-      .attr("stroke", "rgba(255,255,255,0.1)");
-    
-    // Horizontal grid lines
-    svg
-      .append("line")
-      .attr("x1", margin.left)
-      .attr("y1", y(val))
-      .attr("x2", margin.left + size)
-      .attr("y2", y(val))
-      .attr("stroke-dasharray", "2,2")
-      .attr("stroke", "rgba(255,255,255,0.1)");
-  }
-  
-  // X axis labels
-  for (let i = 0; i <= 5; i++) {
-    const val = i / 5;
-    svg
-      .append("text")
-      .attr("x", x(val))
-      .attr("y", margin.top + size + 20)
-      .attr("text-anchor", "middle")
-      .style("font-size", "11px")
-      .style("fill", "rgba(238, 244, 255, 0.6)")
-      .text(val.toFixed(1));
-  }
-  
-  // Y axis labels
-  for (let i = 0; i <= 5; i++) {
-    const val = i / 5;
-    svg
-      .append("text")
-      .attr("x", margin.left - 15)
-      .attr("y", y(val) + 4)
-      .attr("text-anchor", "end")
-      .style("font-size", "11px")
-      .style("fill", "rgba(238, 244, 255, 0.6)")
-      .text(val.toFixed(1));
-  }
-
-  // Center lines
-  svg
-    .append("line")
-    .attr("x1", x(0.5))
-    .attr("x2", x(0.5))
-    .attr("y1", margin.top)
-    .attr("y2", margin.top + size)
-    .attr("stroke", "rgba(255,255,255,0.12)")
-    .attr("stroke-dasharray", "4 6");
-
-  svg
-    .append("line")
-    .attr("y1", y(0.5))
-    .attr("y2", y(0.5))
-    .attr("x1", margin.left)
-    .attr("x2", margin.left + size)
-    .attr("stroke", "rgba(255,255,255,0.12)")
-    .attr("stroke-dasharray", "4 6");
-
-  // Draw axes with labels
-  // X axis line
-  svg
-    .append("line")
-    .attr("x1", margin.left)
-    .attr("y1", margin.top + size)
-    .attr("x2", margin.left + size)
-    .attr("y2", margin.top + size)
-    .attr("stroke", "rgba(238, 244, 255, 0.3)")
-    .attr("stroke-width", 2);
-
-  // Y axis line
-  svg
-    .append("line")
-    .attr("x1", margin.left)
-    .attr("y1", margin.top)
-    .attr("x2", margin.left)
-    .attr("y2", margin.top + size)
-    .attr("stroke", "rgba(238, 244, 255, 0.3)")
-    .attr("stroke-width", 2);
-
-  const line = d3
-    .line()
-    .x((d) => x(d.valence))
-    .y((d) => y(d.arousal))
-    .curve(d3.curveCatmullRom.alpha(0.5));
-
-  const colors = d3.schemeCategory10;
-
-  data.participants.forEach((participant, idx) => {
-    if (!participant.events || participant.events.length === 0) return;
-
-    // Filter events to only matched tracks with numeric valence/arousal
-    const validEvents = participant.events
-      .filter((e) => e.matched === true && e.valence != null && e.arousal != null)
-      .map((e) => ({ ...e, valence: Number(e.valence), arousal: Number(e.arousal) }))
-      .filter((e) => isFinite(e.valence) && isFinite(e.arousal));
-
-    if (validEvents.length < 2) return;
-
-    const color = colors[idx % colors.length];
-    const pathGroup = svg.append("g");
-
-    // Remove consecutive duplicate points to avoid curve generation issues
-    const uniqueEvents = validEvents.filter((d, i) => {
-      if (i === 0) return true;
-      const prev = validEvents[i - 1];
-      return !(Number(prev.valence) === Number(d.valence) && Number(prev.arousal) === Number(d.arousal));
-    });
-
-    if (uniqueEvents.length < 2) return; // nothing to draw
-
-    // Compute screen coordinates and guard against any NaNs
-    const coords = uniqueEvents.map((d) => ({
-      valence: Number(d.valence),
-      arousal: Number(d.arousal),
-      cx: x(Number(d.valence)),
-      cy: y(Number(d.arousal)),
+  drawable.forEach((entry, index) => {
+    const color = colors[index % colors.length];
+    const coords = entry.events.map((event) => ({
+      ...event,
+      valence: Number(event.valence),
+      arousal: Number(event.arousal),
     }));
-
-    if (coords.some((c) => !isFinite(c.cx) || !isFinite(c.cy))) {
-      return; // skip drawing this participant if any coordinate invalid
-    }
-
-    // Choose a curve type: CatmullRom for 3+ points, linear otherwise
-    const useCurve = coords.length >= 3;
-    const lineGenerator = d3
+    const line = d3
       .line()
-      .x((d) => x(d.valence))
-      .y((d) => y(d.arousal))
-      .curve(useCurve ? d3.curveCatmullRom.alpha(0.5) : d3.curveLinear);
+      .x((event) => x(event.valence))
+      .y((event) => y(event.arousal))
+      .curve(coords.length >= 3 ? d3.curveCatmullRom.alpha(0.45) : d3.curveLinear);
 
-    // Draw line using precomputed coords (manual polyline to avoid curve-control NaNs)
-    const pathD = coords.map((c, i) => (i === 0 ? `M${c.cx},${c.cy}` : `L${c.cx},${c.cy}`)).join(" ");
-    pathGroup
+    const group = svg.append("g").attr("class", "participant-path");
+    group
       .append("path")
+      .datum(coords)
+      .attr("d", line)
       .attr("fill", "none")
       .attr("stroke", color)
-      .attr("stroke-width", 2.5)
+      .attr("stroke-width", 2.8)
       .attr("stroke-linecap", "round")
       .attr("stroke-linejoin", "round")
-      .attr("opacity", 0.9)
-      .attr("d", pathD);
+      .attr("opacity", 0.8);
 
-    // Draw points
-    pathGroup
+    group
       .selectAll("circle")
       .data(coords)
       .enter()
       .append("circle")
-      .attr("cx", (d) => d.cx)
-      .attr("cy", (d) => d.cy)
-      .attr("r", 3.5)
+      .attr("cx", (event) => x(event.valence))
+      .attr("cy", (event) => y(event.arousal))
+      .attr("r", 4)
       .attr("fill", color)
-      .attr("opacity", 0.9);
+      .attr("stroke", "rgba(255,255,255,0.72)")
+      .attr("stroke-width", 0.8)
+      .append("title")
+      .text((event) => `${entry.participant.id}: ${event.track} by ${event.artist}\nValence ${formatNumber(event.valence)} · Arousal ${formatNumber(event.arousal)}`);
 
-    // Add an entry to the HTML legend
-    const item = document.createElement("div");
-    item.className = "trajectory-legend__item";
-    item.innerHTML = `<span class=\"legend-swatch\" style=\"background:${color}\"></span><span class=\"legend-label\">${participant.id}</span>`;
-    legendContainer.appendChild(item);
+    const legendItem = document.createElement("div");
+    legendItem.className = "trajectory-legend__item";
+    legendItem.innerHTML = `
+      <span class="legend-swatch" style="background:${color}"></span>
+      <span class="legend-label"><b>${escapeHtml(entry.participant.id)}</b><small>${entry.events.length} points · volatility ${formatNumber(entry.stats.volatility)}</small></span>
+    `;
+    sideNode.append(legendItem);
   });
 
-  // X axis label
-  svg
-    .append("text")
-    .attr("x", margin.left + size / 2)
-    .attr("y", height - 5)
-    .attr("text-anchor", "middle")
-    .style("font-size", "13px")
-    .style("fill", "rgba(238, 244, 255, 0.7)")
-    .style("font-weight", "500")
-    .text("Valence (Positivity)");
+  renderSkippedParticipants(data.participants, sideNode);
+}
 
-  // Y axis label
-  svg
-    .append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -(margin.top + size / 2))
-    .attr("y", 15)
-    .attr("text-anchor", "middle")
-    .style("font-size", "13px")
-    .style("fill", "rgba(238, 244, 255, 0.7)")
-    .style("font-weight", "500")
-    .text("Arousal (Energy)");
+function drawTrajectoryScaffold(svg, { x, y, margin, size, width, height }) {
+  for (let i = 0; i <= 5; i += 1) {
+    const value = i / 5;
+    svg.append("line").attr("x1", x(value)).attr("y1", margin.top).attr("x2", x(value)).attr("y2", margin.top + size).attr("class", "trajectory-grid");
+    svg.append("line").attr("x1", margin.left).attr("y1", y(value)).attr("x2", margin.left + size).attr("y2", y(value)).attr("class", "trajectory-grid");
+    svg.append("text").attr("x", x(value)).attr("y", margin.top + size + 22).attr("text-anchor", "middle").attr("class", "svg-label").text(value.toFixed(1));
+    svg.append("text").attr("x", margin.left - 14).attr("y", y(value) + 4).attr("text-anchor", "end").attr("class", "svg-label").text(value.toFixed(1));
+  }
+
+  svg.append("line").attr("x1", x(0.5)).attr("x2", x(0.5)).attr("y1", margin.top).attr("y2", margin.top + size).attr("class", "trajectory-midline");
+  svg.append("line").attr("y1", y(0.5)).attr("y2", y(0.5)).attr("x1", margin.left).attr("x2", margin.left + size).attr("class", "trajectory-midline");
+  svg.append("text").attr("x", margin.left + size / 2).attr("y", height - 12).attr("text-anchor", "middle").attr("class", "svg-label").text("Valence (positivity)");
+  svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + size / 2)).attr("y", 18).attr("text-anchor", "middle").attr("class", "svg-label").text("Arousal (energy)");
+}
+
+function renderSkippedParticipants(participants, container = elements.trajectoryContainer) {
+  const skipped = participants.filter((participant) => (participant.filteredEvents ?? []).length < 2);
+  if (!skipped.length) return;
+
+  const note = document.createElement("div");
+  note.className = "chart-panel__note trajectory-note";
+  note.textContent = `${skipped.length} selected participant${skipped.length === 1 ? "" : "s"} had fewer than two matched points in the current range.`;
+  container.append(note);
+}
+
+function computeAggregateStats(participants) {
+  const participantStats = participants.map((participant) => computeParticipantStats(participant, participant.filteredEvents));
+  const matchedEvents = participants.flatMap((participant) => participant.filteredEvents ?? []);
+  const totalEvents = participants.reduce((sum, participant) => sum + (participant.events?.length ?? 0), 0);
+
+  return {
+    participantCount: participants.length,
+    totalEvents,
+    matchedEvents: matchedEvents.length,
+    matchRate: totalEvents ? matchedEvents.length / totalEvents : 0,
+    meanValence: mean(matchedEvents.map((event) => Number(event.valence))),
+    meanArousal: mean(matchedEvents.map((event) => Number(event.arousal))),
+    meanVolatility: mean(participantStats.map((stats) => stats.volatility)),
+  };
+}
+
+function computeParticipantStats(participant, eventsOverride = null) {
+  const totalEvents = participant.events?.length ?? 0;
+  const matched = eventsOverride ?? (participant.events ?? []).filter((event) => eventInEmotionalRange(event, CONFIG.DEFAULT_RANGE));
+  const volatility = computeVolatility(matched);
+
+  return {
+    totalEvents,
+    matchedEvents: matched.length,
+    matchRate: totalEvents ? matched.length / totalEvents : 0,
+    meanValence: mean(matched.map((event) => Number(event.valence))),
+    meanArousal: mean(matched.map((event) => Number(event.arousal))),
+    volatility,
+  };
+}
+
+function computeVolatility(events) {
+  if (!events || events.length < 2) return null;
+  let total = 0;
+  let steps = 0;
+  for (let index = 1; index < events.length; index += 1) {
+    const previous = events[index - 1];
+    const current = events[index];
+    const distance = Math.hypot(Number(current.valence) - Number(previous.valence), Number(current.arousal) - Number(previous.arousal));
+    if (Number.isFinite(distance)) {
+      total += distance;
+      steps += 1;
+    }
+  }
+  return steps ? total / steps : null;
+}
+
+async function findMetadataFile(files) {
+  const csvFiles = files.filter((file) => basename(file).toLowerCase().endsWith(".csv"));
+  const likely = csvFiles.find((file) => basename(file).toLowerCase() === "metadata.csv");
+  if (likely) return likely;
+
+  for (const file of csvFiles) {
+    const preview = await file.text();
+    const [header = ""] = preview.split(/\r?\n/, 1);
+    if (header.split(",").map((cell) => cell.trim()).includes(CONFIG.PARTICIPANT_ID_FIELD)) {
+      return file;
+    }
+  }
+  return null;
+}
+
+function validateResearchFiles(participantIds, listeningFiles) {
+  const expected = new Set(participantIds);
+  const actual = new Set(listeningFiles.map((file) => basename(file).replace(/\.(csv|json|tsv)$/i, "")));
+  const missing = [...expected].filter((id) => !actual.has(id));
+  const extra = [...actual].filter((id) => !expected.has(id));
+
+  if (missing.length || extra.length) {
+    const parts = [];
+    if (missing.length) parts.push(`Missing listening files for: ${missing.join(", ")}`);
+    if (extra.length) parts.push(`Files not found in metadata: ${extra.join(", ")}`);
+    return { valid: false, message: parts.join("\n") };
+  }
+
+  return { valid: true, message: "" };
+}
+
+function parseCSV(text) {
+  const rows = [];
+  const parsedRows = parseCsvRows(text);
+  const [headers, ...records] = parsedRows;
+  if (!headers) return rows;
+
+  records.forEach((record) => {
+    if (!record.some((value) => value.trim())) return;
+    const row = {};
+    headers.forEach((header, index) => {
+      row[header.trim()] = (record[index] ?? "").trim();
+    });
+    rows.push(row);
+  });
+  return rows;
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+}
+
+function inferMetadataFields(metadata) {
+  const first = metadata[0] ?? {};
+  return Object.keys(first).filter((key) => key !== CONFIG.PARTICIPANT_ID_FIELD);
+}
+
+function chooseDefaultFields(fields, metadata) {
+  const numeric = fields.filter((field) => getFieldType(field, metadata) === "numeric");
+  return (numeric.length ? numeric : fields).slice(0, 3);
+}
+
+function getFieldType(field, metadata) {
+  const values = metadata.map((row) => row[field]).filter((value) => value !== "" && value != null);
+  if (!values.length) return "empty";
+  return values.every((value) => Number.isFinite(parseFloat(value))) ? "numeric" : "categorical";
+}
+
+function isSupportedListeningFile(file) {
+  return /\.(csv|tsv|json)$/i.test(basename(file));
+}
+
+function basename(file) {
+  return (file.webkitRelativePath || file.name).split("/").pop();
+}
+
+function mean(values) {
+  const finite = values.filter((value) => Number.isFinite(value));
+  return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : null;
+}
+
+function clampNumber(value, min, max) {
+  const parsed = parseFloat(value);
+  if (!Number.isFinite(parsed)) return min;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function describeRange(range) {
+  return `Valence ${range.valenceMin.toFixed(2)}-${range.valenceMax.toFixed(2)} · Arousal ${range.arousalMin.toFixed(2)}-${range.arousalMax.toFixed(2)}`;
+}
+
+function formatNumber(value) {
+  if (value == null || Number.isNaN(value)) return "-";
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatRatio(value) {
+  return `${Math.round((Number.isFinite(value) ? value : 0) * 100)}%`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
 }
 
 function showStatus(message, type) {
   const div = document.createElement("div");
   div.className = `status-message ${type}`;
   div.textContent = message;
-  elements.statusMessage.innerHTML = "";
-  elements.statusMessage.append(div);
+  elements.statusMessage.replaceChildren(div);
 }
 
-function clearStatus() {
-  elements.statusMessage.innerHTML = "";
+function wireResizeHandling() {
+  let resizeHandle = null;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(resizeHandle);
+    resizeHandle = window.setTimeout(() => {
+      if (state.data) {
+        renderTrajectories(getFilteredData());
+      }
+    }, 140);
+  });
 }

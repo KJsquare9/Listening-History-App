@@ -168,9 +168,13 @@
       color: #ffb8b8;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     .controls {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: minmax(240px, 0.9fr) minmax(240px, 0.9fr) minmax(280px, 1.2fr);
       gap: var(--space-4);
       padding: var(--space-5);
       border-radius: var(--radius-lg);
@@ -244,6 +248,74 @@
       flex: 1;
     }
 
+    .researcher-choice span {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .researcher-choice small {
+      color: var(--soft);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .range-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+
+    .range-field {
+      display: grid;
+      gap: var(--space-1);
+    }
+
+    .range-field span {
+      color: var(--soft);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .range-field input {
+      width: 100%;
+      min-height: 40px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(8, 15, 28, 0.9);
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    .range-field input:focus {
+      outline: 0;
+      border-color: rgba(104, 210, 201, 0.55);
+      box-shadow: var(--shadow-focus);
+    }
+
+    .range-message {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+
+    .range-message.is-error {
+      color: #ffb8b8;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-4);
+      margin-top: var(--space-4);
+    }
+
+    .research-stat {
+      min-height: 132px;
+    }
+
     .analysis-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
@@ -268,15 +340,175 @@
       margin-bottom: var(--space-3);
     }
 
+    .chart-panel__note {
+      color: var(--soft);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      margin-bottom: var(--space-4);
+    }
+
+    .metadata-panel {
+      min-height: 260px;
+    }
+
+    .research-bars {
+      height: 180px;
+      display: flex;
+      align-items: flex-end;
+      gap: 7px;
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .research-bar {
+      flex: 1;
+      min-height: 4px;
+      border-radius: 6px 6px 2px 2px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 24px rgba(104, 210, 201, 0.1);
+    }
+
+    .research-mini-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-3);
+      margin-top: var(--space-4);
+    }
+
+    .research-mini-stats div {
+      padding: var(--space-3);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .research-mini-stats span,
+    .category-row span {
+      display: block;
+      color: var(--soft);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .research-mini-stats b {
+      display: block;
+      margin-top: var(--space-1);
+      font-size: 1.08rem;
+    }
+
+    .category-list {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .category-row {
+      display: grid;
+      grid-template-columns: minmax(80px, 0.8fr) minmax(100px, 1.4fr) auto;
+      gap: var(--space-3);
+      align-items: center;
+    }
+
+    .category-row__bar {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .category-row__bar i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .trajectory-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+      gap: var(--space-5);
+      align-items: start;
+    }
+
+    .trajectory-chart {
+      min-width: 0;
+    }
+
+    .trajectory-side {
+      display: grid;
+      gap: var(--space-2);
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .trajectory-legend__item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-2);
+      align-items: start;
+      padding: var(--space-2);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .legend-label {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .legend-label small {
+      color: var(--soft);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .trajectory-grid {
+      stroke: rgba(255, 255, 255, 0.075);
+      stroke-dasharray: 2 4;
+    }
+
+    .trajectory-midline {
+      stroke: rgba(255, 255, 255, 0.14);
+      stroke-dasharray: 4 6;
+    }
+
+    .trajectory-note {
+      margin-top: var(--space-3);
+      padding: var(--space-3);
+      border-radius: var(--radius-sm);
+      background: rgba(242, 182, 109, 0.08);
+      border: 1px solid rgba(242, 182, 109, 0.14);
+    }
+
     .empty-message {
       text-align: center;
       padding: var(--space-6);
       color: var(--soft);
     }
 
+    .empty-message--compact {
+      padding: var(--space-3);
+      text-align: left;
+    }
+
     @media (max-width: 900px) {
       [style*="grid-template-columns: 1fr 1fr"] {
         grid-template-columns: 1fr !important;
+      }
+
+      .controls,
+      .summary-grid,
+      .trajectory-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .analysis-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -336,7 +568,7 @@
             <div style="display: grid; place-items: center; gap: var(--space-4); padding: var(--space-5); border-radius: var(--radius-lg); background: rgba(255, 166, 72, 0.08); border: 1px dashed rgba(255, 166, 72, 0.3);">
               <div style="text-align: center;">
                 <p style="font-weight: 700; margin-bottom: var(--space-2);">Try the demo</p>
-                <p style="font-size: 0.9rem; color: var(--soft); margin-bottom: var(--space-3);">Load sample researcher data with 3 participants</p>
+                <p style="font-size: 0.9rem; color: var(--soft); margin-bottom: var(--space-3);">Load sample researcher data with multiple participants</p>
               </div>
               <button class="button button--secondary" id="demoBtn" style="width: 100%;">
                 Load Demo
@@ -346,7 +578,7 @@
         </section>
 
         <!-- Analysis Controls -->
-        <section class="section" id="analysisSection" style="display: none">
+        <section class="section" id="analysisSection" hidden>
           <h2 class="section__title">Step 2: Configure Analysis</h2>
 
           <div class="controls">
@@ -359,20 +591,45 @@
               <label class="control-label">Select Fields to Compare</label>
               <div class="checkbox-group" id="fieldCheckboxes"></div>
             </div>
+
+            <div class="control-group">
+              <label class="control-label">Emotional Range Filter</label>
+              <div class="range-grid">
+                <label class="range-field">
+                  <span>Valence min</span>
+                  <input type="number" id="valenceMin" min="0" max="1" step="0.05" value="0" />
+                </label>
+                <label class="range-field">
+                  <span>Valence max</span>
+                  <input type="number" id="valenceMax" min="0" max="1" step="0.05" value="1" />
+                </label>
+                <label class="range-field">
+                  <span>Arousal min</span>
+                  <input type="number" id="arousalMin" min="0" max="1" step="0.05" value="0" />
+                </label>
+                <label class="range-field">
+                  <span>Arousal max</span>
+                  <input type="number" id="arousalMax" min="0" max="1" step="0.05" value="1" />
+                </label>
+              </div>
+              <p class="range-message" id="rangeMessage">Valence 0.00-1.00 · Arousal 0.00-1.00</p>
+              <button class="button button--secondary" type="button" id="resetResearchFilters">Reset analysis filters</button>
+            </div>
           </div>
         </section>
 
         <!-- Analysis Results -->
-        <section class="section" id="resultsSection" style="display: none">
+        <section class="section" id="resultsSection" hidden>
           <h2 class="section__title">Analysis Results</h2>
+          <div class="summary-grid" id="summaryGrid"></div>
           <div class="analysis-grid" id="analysisGrid"></div>
         </section>
 
         <!-- Trajectory View -->
-        <section class="section" id="trajectorySection" style="display: none">
+        <section class="section" id="trajectorySection" hidden>
           <h2 class="section__title">V-A Trajectory View</h2>
           <div style="font-size: 0.9rem; color: var(--soft); margin-bottom: var(--space-4); padding: var(--space-3); background: rgba(104, 210, 201, 0.1); border-radius: 4px; border-left: 3px solid var(--accent);">
-            Use the participant checkboxes above to select which participants to display in the trajectory comparison.
+            Use participant selection and emotional range filters to inspect how each listener moves through valence-arousal space.
           </div>
           <div id="trajectoryContainer" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-5); min-height: 600px"></div>
         </section>

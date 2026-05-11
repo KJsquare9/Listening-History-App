@@ -1,7 +1,10 @@
-import io
-import json
+from __future__ import annotations
+
+import csv
+from io import StringIO
+from pathlib import Path
+
 from flask import Blueprint, request, jsonify, current_app
-from api.enricher import TrackEnricher
 
 researcher_bp = Blueprint("researcher", __name__, url_prefix="/api/researcher")
 
@@ -15,8 +18,6 @@ def demo_researcher_data():
     Uses pre-loaded sample data from data/research_demo/.
     """
     try:
-        from pathlib import Path
-        
         app = current_app._get_current_object()
         data_path = Path(app.config["DATA_PATH"]) / "research_demo"
         registry = app.config["PARSER_REGISTRY"]
@@ -56,7 +57,7 @@ def demo_researcher_data():
                 
                 participants.append({
                     "id": participant_id,
-                    "events": enriched_events,
+                    "events": [event.to_dict() for event in enriched_events],
                     "metadata": row,
                     "summary": summary,
                 })
@@ -105,7 +106,7 @@ def process_researcher_data():
             return jsonify({"error": "No listening history files uploaded"}), 400
         
         # Parse metadata CSV
-        metadata_text = metadata_file.read().decode("utf-8")
+        metadata_text = metadata_file.read().decode("utf-8-sig", errors="replace")
         metadata = parse_csv(metadata_text)
         
         # Validate Participant_ID field exists
@@ -113,7 +114,7 @@ def process_researcher_data():
             return jsonify({"error": f"Metadata must contain {PARTICIPANT_ID_FIELD} column"}), 400
         
         # Validate file names match Participant_IDs
-        participant_ids = set(row[PARTICIPANT_ID_FIELD] for row in metadata)
+        participant_ids = {row[PARTICIPANT_ID_FIELD] for row in metadata if row.get(PARTICIPANT_ID_FIELD)}
         file_names = set(f.filename.rsplit(".", 1)[0] for f in listening_files)
         
         missing = participant_ids - file_names
@@ -135,7 +136,7 @@ def process_researcher_data():
                 participant_id = listening_file.filename.rsplit(".", 1)[0]
                 
                 # Parse listening history using registry
-                file_content = listening_file.read().decode("utf-8")
+                file_content = listening_file.read().decode("utf-8-sig", errors="replace")
                 format_id = registry.detect_format(listening_file.filename, file_content)
                 parser = registry.get(format_id)
                 events = parser.parse(file_content, filename=listening_file.filename)
@@ -154,7 +155,7 @@ def process_researcher_data():
                 
                 participants.append({
                     "id": participant_id,
-                    "events": enriched_events,
+                    "events": [event.to_dict() for event in enriched_events],
                     "metadata": participant_meta,
                     "summary": summary,
                 })
@@ -177,22 +178,18 @@ def process_researcher_data():
         return jsonify({"error": str(e)}), 500
 
 
-def parse_csv(text):
+def parse_csv(text: str) -> list[dict[str, str]]:
     """Parse CSV text into list of dictionaries."""
-    lines = text.strip().split("\n")
-    if not lines:
+    if not text.strip():
         return []
-    
-    headers = [h.strip() for h in lines[0].split(",")]
-    rows = []
-    
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        values = [v.strip() for v in line.split(",")]
-        row = {}
-        for i, header in enumerate(headers):
-            row[header] = values[i] if i < len(values) else ""
-        rows.append(row)
-    
-    return rows
+
+    reader = csv.DictReader(StringIO(text))
+    return [
+        {
+            (key or "").strip(): (value or "").strip()
+            for key, value in row.items()
+            if key is not None
+        }
+        for row in reader
+        if any((value or "").strip() for value in row.values())
+    ]
