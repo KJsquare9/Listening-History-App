@@ -70,6 +70,7 @@ function renderTabs() {
     button.type = "button";
     button.role = "tab";
     button.dataset.tab = entry.id;
+    button.setAttribute("aria-selected", entry.id === state.activeId ? "true" : "false");
     button.textContent = entry.label;
     button.title = entry.description;
     button.addEventListener("click", () => setActiveChart(entry.id));
@@ -240,7 +241,9 @@ function setActiveChart(id, { preserveTabs = false } = {}) {
   next.module.mount(elements.chartFrame, getFilteredPayload(state.payload));
 
   Array.from(elements.tabs.querySelectorAll(".tab")).forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tab === next.id);
+    const isActive = button.dataset.tab === next.id;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
   });
 }
 
