@@ -3,7 +3,7 @@ import * as trajectory from "./charts/va_trajectory.js";
 import * as timeseries from "./charts/va_timeseries.js";
 import * as cohorts from "./charts/cohort_compare.js";
 import * as duration from "./charts/ms_played.js";
-import { clearNode, formatDuration, formatRatio } from "./charts/shared.js";
+import { clearNode, formatDuration, formatRatio, formatMoodValue, shiftMoodValue } from "./charts/shared.js";
 
 const registry = [
   { id: "trajectory", label: "Trajectory", description: "Valence vs arousal path", module: trajectory },
@@ -141,8 +141,8 @@ function renderSummary(payload, sourceLabel) {
   const cards = [
     { label: "Tracks", value: summary.total_events ?? 0, hint: `Matched ${summary.matched_count ?? 0} of ${summary.total_events ?? 0}` },
     { label: "Match rate", value: formatRatio(summary.match_rate ?? 0), hint: `Source: ${sourceLabel}` },
-    { label: "Valence avg", value: formatNumber(summary.valence_mean), hint: "Internal song dataset" },
-    { label: "Arousal avg", value: formatNumber(summary.arousal_mean), hint: `Session length ${formatDuration(summary.total_ms_played ?? 0)}` },
+    { label: "Valence avg", value: formatMoodValue(summary.valence_mean), hint: "Internal song dataset (expected VA range 0-1)" },
+    { label: "Arousal avg", value: formatMoodValue(summary.arousal_mean), hint: `Session length ${formatDuration(summary.total_ms_played ?? 0)} · displayed as -0.5 to 0.5` },
   ];
 
   clearNode(elements.summaryCards);
@@ -197,14 +197,14 @@ function renderReferenceGroups(payload) {
 
 function renderSparkline(payload = null) {
   clearNode(elements.heroSparkline);
-  const values = (payload?.matched_events ?? []).slice(0, 18).map((event) => event.valence ?? 0.5);
-  const sparkValues = values.length > 2 ? values : [0.35, 0.52, 0.63, 0.48, 0.58, 0.71, 0.66, 0.8];
+  const values = (payload?.matched_events ?? []).slice(0, 18).map((event) => shiftMoodValue(event.valence ?? 0.5));
+  const sparkValues = values.length > 2 ? values : [-0.15, 0.02, 0.13, -0.02, 0.08, 0.21, 0.16, 0.3];
   const width = 300;
   const height = 120;
   const margin = { top: 12, right: 10, bottom: 18, left: 10 };
   const svg = d3.select(elements.heroSparkline).append("svg").attr("viewBox", `0 0 ${width} ${height}`).style("width", "100%").style("height", "100%");
   const x = d3.scaleLinear().domain([0, sparkValues.length - 1]).range([margin.left, width - margin.right]);
-  const y = d3.scaleLinear().domain([0, 1]).range([height - margin.bottom, margin.top]);
+  const y = d3.scaleLinear().domain([-0.5, 0.5]).range([height - margin.bottom, margin.top]);
   const line = d3.line().x((d, index) => x(index)).y((d) => y(d)).curve(d3.curveMonotoneX);
   svg.append("path").datum(sparkValues).attr("d", line).attr("fill", "none").attr("stroke", "url(#sparklineGradient)").attr("stroke-width", 4).attr("stroke-linecap", "round");
   const defs = svg.append("defs");

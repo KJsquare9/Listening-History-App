@@ -1,11 +1,11 @@
-import { chartLayout, clearNode, createChartShell, makeTooltip, formatCompact } from "./shared.js";
+import { chartLayout, clearNode, createChartShell, makeTooltip, formatCompact, formatMoodValue, shiftMoodValue } from "./shared.js";
 
 export function mount(container, payload) {
   clearNode(container);
   const matched = payload.matched_events ?? [];
   const { shell, chart } = createChartShell({
     title: "Valence and arousal over time",
-    subtitle: "The same session expressed as two lines, letting mood shifts and spikes stay visible across the play order.",
+    subtitle: "The same session expressed as two lines. Expected VA input range is 0-1; the graph displays -0.5 to 0.5.",
     legend: [
       { label: "Valence", color: "#68d2c9" },
       { label: "Arousal", color: "#f2b66d" },
@@ -21,7 +21,7 @@ export function mount(container, payload) {
   const { width, height, margin, innerWidth, innerHeight } = chartLayout(container, { minHeight: 580 });
   const svg = d3.select(chart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).classed("chart-svg", true);
   const x = d3.scaleLinear().domain([0, Math.max(1, matched.length - 1)]).range([margin.left, margin.left + innerWidth]);
-  const y = d3.scaleLinear().domain([0, 1]).range([margin.top + innerHeight, margin.top]);
+  const y = d3.scaleLinear().domain([-0.5, 0.5]).range([margin.top + innerHeight, margin.top]);
 
   const gridX = d3.axisBottom(x).ticks(Math.min(8, matched.length)).tickSize(-innerHeight).tickFormat(() => "");
   const gridY = d3.axisLeft(y).ticks(5).tickSize(-innerWidth).tickFormat(() => "");
@@ -47,24 +47,24 @@ export function mount(container, payload) {
     .attr("y", margin.top + innerHeight / 2)
     .attr("text-anchor", "middle")
     .attr("transform", `rotate(-90,18,${margin.top + innerHeight / 2})`)
-    .text("Mood score");
+    .text("Mood score (-0.5 to 0.5)");
 
   const valenceLine = d3
     .line()
     .x((_, index) => x(index))
-    .y((d) => y(d.valence))
+    .y((d) => y(shiftMoodValue(d.valence)))
     .curve(d3.curveMonotoneX);
   const arousalLine = d3
     .line()
     .x((_, index) => x(index))
-    .y((d) => y(d.arousal))
+    .y((d) => y(shiftMoodValue(d.arousal)))
     .curve(d3.curveMonotoneX);
 
   const area = d3
     .area()
     .x((_, index) => x(index))
     .y0(margin.top + innerHeight)
-    .y1((d) => y(d.valence))
+    .y1((d) => y(shiftMoodValue(d.valence)))
     .curve(d3.curveMonotoneX);
 
   const defs = svg.append("defs");
@@ -78,12 +78,16 @@ export function mount(container, payload) {
 
   const meanValence = d3.mean(matched, (d) => d.valence) ?? 0;
   const meanArousal = d3.mean(matched, (d) => d.arousal) ?? 0;
+  const medianValence = d3.median(matched, (d) => d.valence) ?? 0;
+  const medianArousal = d3.median(matched, (d) => d.arousal) ?? 0;
 
-  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(meanValence)).attr("y2", y(meanValence)).attr("stroke", "rgba(104,210,201,0.24)").attr("stroke-dasharray", "3 5");
-  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(meanArousal)).attr("y2", y(meanArousal)).attr("stroke", "rgba(242,182,109,0.24)").attr("stroke-dasharray", "3 5");
+  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(meanValence))).attr("y2", y(shiftMoodValue(meanValence))).attr("stroke", "rgba(104,210,201,0.24)").attr("stroke-dasharray", "3 5");
+  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(meanArousal))).attr("y2", y(shiftMoodValue(meanArousal))).attr("stroke", "rgba(242,182,109,0.24)").attr("stroke-dasharray", "3 5");
+  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(medianValence))).attr("y2", y(shiftMoodValue(medianValence))).attr("stroke", "rgba(104,210,201,0.48)").attr("stroke-dasharray", "10 4");
+  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(medianArousal))).attr("y2", y(shiftMoodValue(medianArousal))).attr("stroke", "rgba(242,182,109,0.48)").attr("stroke-dasharray", "10 4");
 
   const tooltip = makeTooltip();
-  const points = svg.append("g").selectAll("g").data(matched).enter().append("g").attr("transform", (_, index) => `translate(${x(index)},${y(matched[index].valence)})`);
+  const points = svg.append("g").selectAll("g").data(matched).enter().append("g").attr("transform", (_, index) => `translate(${x(index)},${y(shiftMoodValue(matched[index].valence))})`);
 
   points
     .append("circle")
@@ -93,7 +97,7 @@ export function mount(container, payload) {
     .attr("stroke-width", 1)
     .on("mousemove", (event, d) => {
       tooltip.show(
-        `<b>${d.track}</b><br />${d.artist}<br />Valence ${d.valence.toFixed(2)} · Arousal ${d.arousal.toFixed(2)}<br />${formatCompact(d.ms_played)}`,
+        `<b>${d.track}</b><br />${d.artist}<br />Valence ${formatMoodValue(d.valence)} · Arousal ${formatMoodValue(d.arousal)}<br />${formatCompact(d.ms_played)}`,
         event.clientX + 16,
         event.clientY + 18,
       );

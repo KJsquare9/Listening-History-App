@@ -22,10 +22,20 @@ export function formatRatio(value) {
   return `${Math.round(value * 100)}%`;
 }
 
+export function shiftMoodValue(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric - 0.5 : null;
+}
+
+export function formatMoodValue(value) {
+  const shifted = shiftMoodValue(value);
+  return shifted == null ? "-" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(shifted);
+}
+
 export function chartLayout(container, { minHeight = 540 } = {}) {
   const width = Math.max(300, container.getBoundingClientRect().width || container.clientWidth || 300);
   const height = Math.max(minHeight, Math.round(width * 0.66));
-  const margin = { top: 22, right: 24, bottom: 56, left: 60 };
+  const margin = { top: 22, right: 24, bottom: 72, left: 60 };
   return {
     width,
     height,

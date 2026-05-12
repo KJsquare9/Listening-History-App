@@ -17,10 +17,50 @@ The system is split into two modes:
 
 ### Researcher Mode
 - Multi-user listening history analysis and comparison
-- **Upload**: Drag-and-drop folder upload with metadata CSV file (Participant_ID required)
+- **Upload**: Drag-and-drop folder upload with metadata CSV file (Participant_ID required by default)
 - **Validation**: Automatic file-name-to-Participant_ID matching
 - **Analysis**: Distribution plots for metadata fields, multi-participant V-A trajectories, filtering by field and participant
-- See [RESEARCHER_MODE.md](RESEARCHER_MODE.md) for details
+
+Researcher Mode Details
+
+The researcher interface supports multi-participant uploads and comparative visualisations. Key points:
+
+- Frontend: `frontend/researcher.html` and `frontend/researcher.js` implement drag-and-drop upload, metadata validation, and the analysis UI (distribution plots and V–A trajectories).
+- Backend: `POST /api/researcher/process` (implemented in `api/researcher.py`) parses the provided listening files, enriches events using the internal song dataset, and returns aggregated participant data and metadata field names for filtering.
+- Demo data: a ready-made demo set lives in `data/research_demo/` for quick testing.
+
+Data requirements and formats
+
+- `metadata` CSV: must contain a column identifying each participant (default column name: `Participant_ID`).
+- `listening_files`: one listening history file per participant. Supported formats: CSV/TSV (generic), Spotify JSON, YouTube Music JSON.
+
+Example workflow
+
+1. Place a `metadata.csv` file and the listening files named to match the participant IDs (filenames without extension) in a folder.
+2. In Researcher Mode, either drop the folder into the upload area or use the file picker and submit.
+3. The backend validates file-name ↔ participant ID matching, parses and enriches the events, and the frontend renders the analysis panels.
+
+Configuration: changing the participant ID column
+
+By default Researcher Mode looks for a metadata column named `Participant_ID`. To change this name you have two simple options:
+
+- Quick edit (recommended for local testing): open `api/researcher.py` and change the top-level constant:
+
+	1. Find the line near the top:
+
+		 `PARTICIPANT_ID_FIELD = "Participant_ID"`
+
+	2. Replace `"Participant_ID"` with your desired column name (for example `"ID"`), save and restart the Flask server.
+
+- Runtime config (advanced): if you prefer not to edit the source, you can set a Flask config value before the researcher blueprint is used. Example (in `api/app.py`, before blueprint registration):
+
+	```py
+	app.config["PARTICIPANT_ID_FIELD"] = "YourColumnName"
+	```
+
+	Note: to use this approach you must also update `api/researcher.py` to read from `current_app.config` instead of the hard-coded constant (replace uses of `PARTICIPANT_ID_FIELD` with `current_app.config.get("PARTICIPANT_ID_FIELD", PARTICIPANT_ID_FIELD)`). The quick-edit method above is simpler and already supported.
+
+See also: `data/research_demo/` for a working metadata example and matching participant files.
 
 ---
 

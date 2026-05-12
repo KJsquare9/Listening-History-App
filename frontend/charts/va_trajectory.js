@@ -1,4 +1,4 @@
-import { createChartShell, makeTooltip, formatCompact } from "./shared.js";
+import { createChartShell, makeTooltip, formatCompact, formatMoodValue, shiftMoodValue } from "./shared.js";
 
 export function mount(container, payload) {
   container.innerHTML = "";
@@ -6,7 +6,7 @@ export function mount(container, payload) {
 
   const { shell, chart } = createChartShell({
     title: "V-A trajectory",
-    subtitle: "Interactive time-based path through valence and arousal. Use the slider to replay your listening session.",
+    subtitle: "Interactive time-based path through valence and arousal. Expected VA input range is 0-1; the chart displays -0.5 to 0.5.",
     legend: [
       { label: "Current song", color: "#68d2c9" },
       { label: "Path", color: "#68d2c9" },
@@ -34,8 +34,8 @@ export function mount(container, payload) {
   const width = size + margin.left + margin.right;
   const height = size + margin.top + margin.bottom;
 
-  const x = d3.scaleLinear().domain([0, 1]).range([margin.left, margin.left + size]);
-  const y = d3.scaleLinear().domain([0, 1]).range([margin.top + size, margin.top]);
+  const x = d3.scaleLinear().domain([-0.5, 0.5]).range([margin.left, margin.left + size]);
+  const y = d3.scaleLinear().domain([-0.5, 0.5]).range([margin.top + size, margin.top]);
 
   const svg = d3.select(chart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).classed("chart-svg", true).classed("trajectory-svg", true);
 
@@ -71,16 +71,16 @@ export function mount(container, payload) {
   axes.append("g").attr("transform", `translate(0,${margin.top + size})`).call(d3.axisBottom(x).ticks(5));
   axes.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5));
 
-  svg.append("text").attr("class", "svg-label").attr("x", margin.left + size / 2).attr("y", height + 14).attr("text-anchor", "middle").attr("font-size", `${9 * scale}px`).text("Valence");
-  svg.append("text").attr("class", "svg-label").attr("x", -12).attr("y", margin.top + size / 2).attr("text-anchor", "end").attr("font-size", `${9 * scale}px`).attr("transform", `rotate(-90,-12,${margin.top + size / 2})`).text("Arousal");
+  svg.append("text").attr("class", "svg-label").attr("x", margin.left + size / 2).attr("y", height + 14).attr("text-anchor", "middle").attr("font-size", `${9 * scale}px`).text("Valence (-0.5 to 0.5)");
+  svg.append("text").attr("class", "svg-label").attr("x", -12).attr("y", margin.top + size / 2).attr("text-anchor", "end").attr("font-size", `${9 * scale}px`).attr("transform", `rotate(-90,-12,${margin.top + size / 2})`).text("Arousal (-0.5 to 0.5)");
 
   svg.append("line").attr("x1", x(0.5)).attr("x2", x(0.5)).attr("y1", margin.top).attr("y2", margin.top + size).attr("stroke", "rgba(255,255,255,0.12)").attr("stroke-dasharray", "4 6");
   svg.append("line").attr("y1", y(0.5)).attr("y2", y(0.5)).attr("x1", margin.left).attr("x2", margin.left + size).attr("stroke", "rgba(255,255,255,0.12)").attr("stroke-dasharray", "4 6");
 
   svg
     .append("circle")
-    .attr("cx", x(averageValence))
-    .attr("cy", y(averageArousal))
+    .attr("cx", x(shiftMoodValue(averageValence)))
+    .attr("cy", y(shiftMoodValue(averageArousal)))
     .attr("r", 18 * scale)
     .attr("fill", "rgba(255, 166, 72, 0.12)")
     .attr("stroke", "rgba(255, 166, 72, 0.78)")
@@ -93,7 +93,7 @@ export function mount(container, payload) {
   const currentPointGroup = svg.append("g");
   const tooltip = makeTooltip();
 
-  const line = d3.line().x((d) => x(d.valence)).y((d) => y(d.arousal)).curve(d3.curveCatmullRom.alpha(0.5));
+  const line = d3.line().x((d) => x(shiftMoodValue(d.valence))).y((d) => y(shiftMoodValue(d.arousal))).curve(d3.curveCatmullRom.alpha(0.5));
 
   const state = {
     currentIndex: 0,
@@ -194,7 +194,7 @@ export function mount(container, payload) {
       .attr("stroke", "rgba(255,255,255,0.8)")
       .attr("stroke-width", 0.7 * scale)
       .on("mousemove", (event, d) => {
-        tooltip.show(`<b>${d.track}</b><br />${d.artist}<br />Valence ${d.valence.toFixed(2)} · Arousal ${d.arousal.toFixed(2)}<br />${formatCompact(d.ms_played)}`, event.clientX + 16, event.clientY + 18);
+        tooltip.show(`<b>${d.track}</b><br />${d.artist}<br />Valence ${formatMoodValue(d.valence)} · Arousal ${formatMoodValue(d.arousal)}<br />${formatCompact(d.ms_played)}`, event.clientX + 16, event.clientY + 18);
       })
       .on("mouseleave", () => tooltip.hide());
 
@@ -208,8 +208,8 @@ export function mount(container, payload) {
     if (currentEvent) {
       currentPointGroup
         .append("circle")
-        .attr("cx", x(currentEvent.valence))
-        .attr("cy", y(currentEvent.arousal))
+        .attr("cx", x(shiftMoodValue(currentEvent.valence)))
+        .attr("cy", y(shiftMoodValue(currentEvent.arousal)))
         .attr("r", 5 * scale)
         .attr("fill", "none")
         .attr("stroke", "#68d2c9")
@@ -223,7 +223,7 @@ export function mount(container, payload) {
         <div class="trajectory-song-info">
           <div class="trajectory-song-title">${currentEvent.track}</div>
           <div class="trajectory-song-artist">${currentEvent.artist}</div>
-          <div class="trajectory-song-values">VA: ${currentEvent.valence.toFixed(2)} / ${currentEvent.arousal.toFixed(2)}</div>
+          <div class="trajectory-song-values">VA: ${formatMoodValue(currentEvent.valence)} / ${formatMoodValue(currentEvent.arousal)}</div>
         </div>
       `;
     }

@@ -1,4 +1,4 @@
-import { chartLayout, clearNode, createChartShell, makeTooltip } from "./shared.js";
+import { chartLayout, clearNode, createChartShell, makeTooltip, formatMoodValue, shiftMoodValue } from "./shared.js";
 
 function summarize(events) {
   const matched = events.filter((event) => event.matched);
@@ -21,7 +21,7 @@ export function mount(container, payload) {
 
   const { shell, chart } = createChartShell({
     title: "Reference comparison",
-    subtitle: "Compare the user session against one synthetic low-depression and one synthetic high-depression listener.",
+    subtitle: "Compare the user session against one synthetic low-depression and one synthetic high-depression listener. Expected VA input range is 0-1; the graph displays -0.5 to 0.5.",
     legend: [
       { label: "User session", color: "#68d2c9" },
       { label: "High depression reference", color: "#ff8b8b" },
@@ -40,8 +40,8 @@ export function mount(container, payload) {
   const svg = d3.select(chart).append("svg").attr("viewBox", `0 0 ${width} ${height}`).classed("chart-svg", true);
   const allEvents = [...userEvents, ...(high.events ?? []), ...(low.events ?? [])].filter((event) => event.valence != null && event.arousal != null);
 
-  const x = d3.scaleLinear().domain([0, 1]).range([margin.left, margin.left + innerWidth]);
-  const y = d3.scaleLinear().domain([0, 1]).range([margin.top + innerHeight, margin.top]);
+  const x = d3.scaleLinear().domain([-0.5, 0.5]).range([margin.left, margin.left + innerWidth]);
+  const y = d3.scaleLinear().domain([-0.5, 0.5]).range([margin.top + innerHeight, margin.top]);
 
   const gridX = d3.axisBottom(x).ticks(5).tickSize(-innerHeight).tickFormat(() => "");
   const gridY = d3.axisLeft(y).ticks(5).tickSize(-innerWidth).tickFormat(() => "");
@@ -58,7 +58,7 @@ export function mount(container, payload) {
     .attr("x", margin.left + innerWidth / 2)
     .attr("y", height - 14)
     .attr("text-anchor", "middle")
-    .text("Valence");
+    .text("Valence (-0.5 to 0.5)");
 
   svg
     .append("text")
@@ -67,7 +67,7 @@ export function mount(container, payload) {
     .attr("y", margin.top + innerHeight / 2)
     .attr("text-anchor", "middle")
     .attr("transform", `rotate(-90,18,${margin.top + innerHeight / 2})`)
-    .text("Arousal");
+    .text("Arousal (-0.5 to 0.5)");
 
   const tooltip = makeTooltip();
   const layer = svg.append("g");
@@ -95,8 +95,8 @@ export function mount(container, payload) {
       .data(events.filter((event) => event.valence != null && event.arousal != null))
       .enter()
       .append("circle")
-      .attr("cx", (event, index) => x(event.valence + Math.sin(index + jitterSeed) * 0.012))
-      .attr("cy", (event, index) => y(event.arousal + Math.cos(index + jitterSeed) * 0.012))
+      .attr("cx", (event, index) => x(shiftMoodValue(event.valence) + Math.sin(index + jitterSeed) * 0.012))
+      .attr("cy", (event, index) => y(shiftMoodValue(event.arousal) + Math.cos(index + jitterSeed) * 0.012))
       .attr("r", label === "User session" ? 6 : 5)
       .attr("fill", color)
       .attr("fill-opacity", label === "User session" ? 0.92 : 0.34)
@@ -104,7 +104,7 @@ export function mount(container, payload) {
       .attr("stroke-width", 1)
       .on("mousemove", (event, datum) => {
         tooltip.show(
-          `<b>${datum.track}</b><br />${datum.artist}<br />Valence ${datum.valence.toFixed(2)} · Arousal ${datum.arousal.toFixed(2)}`,
+          `<b>${datum.track}</b><br />${datum.artist}<br />Valence ${formatMoodValue(datum.valence)} · Arousal ${formatMoodValue(datum.arousal)}`,
           event.clientX + 16,
           event.clientY + 18,
         );
@@ -120,8 +120,8 @@ export function mount(container, payload) {
 
   const createLine = d3
     .line()
-    .x((event) => x(event.valence))
-    .y((event) => y(event.arousal))
+    .x((event) => x(shiftMoodValue(event.valence)))
+    .y((event) => y(shiftMoodValue(event.arousal)))
     .curve(d3.curveCatmullRom.alpha(0.55));
 
   const getOrderedPathEvents = (events) =>
@@ -160,9 +160,9 @@ export function mount(container, payload) {
   const summaryStrip = document.createElement("div");
   summaryStrip.className = "cohort-card__meta";
   summaryStrip.innerHTML = `
-    <div><span>User average</span><b>${formatValue(userValence)}/${formatValue(userArousal)}</b></div>
-    <div><span>High reference mean</span><b>${formatValue(highStats.valenceMean)}/${formatValue(highStats.arousalMean)}</b></div>
-    <div><span>Low reference mean</span><b>${formatValue(lowStats.valenceMean)}/${formatValue(lowStats.arousalMean)}</b></div>
+    <div><span>User average</span><b>${formatMoodValue(userValence)}/${formatMoodValue(userArousal)}</b></div>
+    <div><span>High reference mean</span><b>${formatMoodValue(highStats.valenceMean)}/${formatMoodValue(highStats.arousalMean)}</b></div>
+    <div><span>Low reference mean</span><b>${formatMoodValue(lowStats.valenceMean)}/${formatMoodValue(lowStats.arousalMean)}</b></div>
   `;
   shell.append(summaryStrip);
 }
