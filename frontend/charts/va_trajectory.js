@@ -74,8 +74,8 @@ export function mount(container, payload) {
   svg.append("text").attr("class", "svg-label").attr("x", margin.left + size / 2).attr("y", height + 14).attr("text-anchor", "middle").attr("font-size", `${9 * scale}px`).text("Valence (-0.5 to 0.5)");
   svg.append("text").attr("class", "svg-label").attr("x", -12).attr("y", margin.top + size / 2).attr("text-anchor", "end").attr("font-size", `${9 * scale}px`).attr("transform", `rotate(-90,-12,${margin.top + size / 2})`).text("Arousal (-0.5 to 0.5)");
 
-  svg.append("line").attr("x1", x(0.5)).attr("x2", x(0.5)).attr("y1", margin.top).attr("y2", margin.top + size).attr("stroke", "rgba(255,255,255,0.12)").attr("stroke-dasharray", "4 6");
-  svg.append("line").attr("y1", y(0.5)).attr("y2", y(0.5)).attr("x1", margin.left).attr("x2", margin.left + size).attr("stroke", "rgba(255,255,255,0.12)").attr("stroke-dasharray", "4 6");
+  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", margin.top).attr("y2", margin.top + size).attr("stroke", "rgba(255,255,255,0.42)").attr("stroke-width", 1.8);
+  svg.append("line").attr("y1", y(0)).attr("y2", y(0)).attr("x1", margin.left).attr("x2", margin.left + size).attr("stroke", "rgba(255,255,255,0.42)").attr("stroke-width", 1.8);
 
   svg
     .append("circle")
@@ -138,16 +138,16 @@ export function mount(container, payload) {
     if (startEvent) {
       markersGroup
         .append("circle")
-        .attr("cx", x(startEvent.valence))
-        .attr("cy", y(startEvent.arousal))
+        .attr("cx", x(shiftMoodValue(startEvent.valence)))
+        .attr("cy", y(shiftMoodValue(startEvent.arousal)))
         .attr("r", 4 * scale)
         .attr("fill", "#4ade80")
         .attr("opacity", 0.8);
       markersGroup
         .append("text")
         .attr("class", "trajectory-marker-label")
-        .attr("x", x(startEvent.valence) - 8 * scale)
-        .attr("y", y(startEvent.arousal) - 6 * scale)
+        .attr("x", x(shiftMoodValue(startEvent.valence)) - 8 * scale)
+        .attr("y", y(shiftMoodValue(startEvent.arousal)) - 6 * scale)
         .attr("font-size", `${8 * scale}px`)
         .text("Start");
     }
@@ -155,16 +155,16 @@ export function mount(container, payload) {
     if (endEvent && endEvent !== startEvent) {
       markersGroup
         .append("circle")
-        .attr("cx", x(endEvent.valence))
-        .attr("cy", y(endEvent.arousal))
+        .attr("cx", x(shiftMoodValue(endEvent.valence)))
+        .attr("cy", y(shiftMoodValue(endEvent.arousal)))
         .attr("r", 4 * scale)
         .attr("fill", "#ff8b8b")
         .attr("opacity", 0.8);
       markersGroup
         .append("text")
         .attr("class", "trajectory-marker-label")
-        .attr("x", x(endEvent.valence) + 8 * scale)
-        .attr("y", y(endEvent.arousal) - 6 * scale)
+        .attr("x", x(shiftMoodValue(endEvent.valence)) + 8 * scale)
+        .attr("y", y(shiftMoodValue(endEvent.arousal)) - 6 * scale)
         .attr("font-size", `${8 * scale}px`)
         .attr("text-anchor", "start")
         .text("End");
@@ -186,8 +186,8 @@ export function mount(container, payload) {
       .data(upToIndex)
       .enter()
       .append("circle")
-      .attr("cx", (d) => x(d.valence))
-      .attr("cy", (d) => y(d.arousal))
+      .attr("cx", (d) => x(shiftMoodValue(d.valence)))
+      .attr("cy", (d) => y(shiftMoodValue(d.arousal)))
       .attr("r", 3 * scale)
       .attr("fill", "#68d2c9")
       .attr("fill-opacity", 0.7)

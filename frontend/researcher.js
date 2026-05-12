@@ -901,8 +901,8 @@ function drawTrajectoryScaffold(svg, { x, y, margin, size, width, height }) {
     svg.append("text").attr("x", margin.left - 16).attr("y", y(shiftedValue) + 4).attr("text-anchor", "end").attr("class", "svg-label").text(shiftedValue.toFixed(1));
   }
 
-  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", margin.top).attr("y2", margin.top + size).attr("class", "trajectory-midline");
-  svg.append("line").attr("y1", y(0)).attr("y2", y(0)).attr("x1", margin.left).attr("x2", margin.left + size).attr("class", "trajectory-midline");
+  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", margin.top).attr("y2", margin.top + size).attr("class", "trajectory-midline").attr("stroke", "rgba(255,255,255,0.42)").attr("stroke-width", 1.8);
+  svg.append("line").attr("y1", y(0)).attr("y2", y(0)).attr("x1", margin.left).attr("x2", margin.left + size).attr("class", "trajectory-midline").attr("stroke", "rgba(255,255,255,0.42)").attr("stroke-width", 1.8);
   svg.append("text").attr("x", margin.left + size / 2).attr("y", height - 12).attr("text-anchor", "middle").attr("class", "svg-label").text("Valence (-0.5 to 0.5)");
   svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + size / 2)).attr("y", 18).attr("text-anchor", "middle").attr("class", "svg-label").text("Arousal (-0.5 to 0.5)");
 }

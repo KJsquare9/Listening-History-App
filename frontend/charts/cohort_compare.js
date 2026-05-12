@@ -81,15 +81,18 @@ export function mount(container, payload) {
   const controls = document.createElement("div");
   controls.className = "comparison-toggle";
   controls.innerHTML = `
-    <span class="comparison-toggle__label">Draw flow for</span>
+    <span class="comparison-toggle__label">Show scatterplot</span>
     <button type="button" class="comparison-toggle__button is-active" data-series="user">User</button>
     <button type="button" class="comparison-toggle__button" data-series="high">High depression</button>
     <button type="button" class="comparison-toggle__button" data-series="low">Low depression</button>
   `;
   shell.append(controls);
 
-  const renderPoints = (events, color, label, jitterSeed = 0) => {
-    const group = layer.append("g");
+  const seriesGroups = {};
+
+  const renderPoints = (events, color, label, jitterSeed = 0, seriesKey = "") => {
+    const group = layer.append("g").attr("data-series", seriesKey);
+    seriesGroups[seriesKey] = group;
     group
       .selectAll("circle")
       .data(events.filter((event) => event.valence != null && event.arousal != null))
@@ -110,44 +113,28 @@ export function mount(container, payload) {
         );
       })
       .on("mouseleave", () => tooltip.hide());
+    return group;
   };
 
-  renderPoints(series.high.events, series.high.color, series.high.label, series.high.jitterSeed);
-  renderPoints(series.low.events, series.low.color, series.low.label, series.low.jitterSeed);
-  renderPoints(series.user.events, series.user.color, series.user.label, series.user.jitterSeed);
+  renderPoints(series.high.events, series.high.color, series.high.label, series.high.jitterSeed, "high");
+  renderPoints(series.low.events, series.low.color, series.low.label, series.low.jitterSeed, "low");
+  renderPoints(series.user.events, series.user.color, series.user.label, series.user.jitterSeed, "user");
 
-  const flowPath = svg.append("path").attr("fill", "none").attr("stroke-width", 3.2).attr("stroke-linecap", "round").attr("stroke-linejoin", "round");
-
-  const createLine = d3
-    .line()
-    .x((event) => x(shiftMoodValue(event.valence)))
-    .y((event) => y(shiftMoodValue(event.arousal)))
-    .curve(d3.curveCatmullRom.alpha(0.55));
-
-  const getOrderedPathEvents = (events) =>
-    [...events]
-      .filter((event) => event.valence != null && event.arousal != null)
-      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
-
-  const drawSelectedFlow = (key) => {
-    const selected = series[key] ?? series.user;
-    const pathEvents = getOrderedPathEvents(selected.events);
-    if (pathEvents.length < 2) {
-      flowPath.attr("d", null);
-      return;
-    }
-    flowPath.attr("d", createLine(pathEvents)).attr("stroke", selected.color);
+  const showOnlySelected = (key) => {
+    Object.keys(seriesGroups).forEach((seriesKey) => {
+      seriesGroups[seriesKey].style("display", seriesKey === key ? "block" : "none");
+    });
   };
 
   controls.querySelectorAll(".comparison-toggle__button").forEach((button) => {
     button.addEventListener("click", () => {
       controls.querySelectorAll(".comparison-toggle__button").forEach((node) => node.classList.remove("is-active"));
       button.classList.add("is-active");
-      drawSelectedFlow(button.dataset.series);
+      showOnlySelected(button.dataset.series);
     });
   });
 
-  drawSelectedFlow("user");
+  showOnlySelected("user");
 
   const note = document.createElement("div");
   note.className = "chart-note";

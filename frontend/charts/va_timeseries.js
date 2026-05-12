@@ -81,6 +81,8 @@ export function mount(container, payload) {
   const medianValence = d3.median(matched, (d) => d.valence) ?? 0;
   const medianArousal = d3.median(matched, (d) => d.arousal) ?? 0;
 
+  svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(0)).attr("y2", y(0)).attr("stroke", "rgba(255,255,255,0.42)").attr("stroke-width", 1.8);
+
   svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(meanValence))).attr("y2", y(shiftMoodValue(meanValence))).attr("stroke", "rgba(104,210,201,0.24)").attr("stroke-dasharray", "3 5");
   svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(meanArousal))).attr("y2", y(shiftMoodValue(meanArousal))).attr("stroke", "rgba(242,182,109,0.24)").attr("stroke-dasharray", "3 5");
   svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(medianValence))).attr("y2", y(shiftMoodValue(medianValence))).attr("stroke", "rgba(104,210,201,0.48)").attr("stroke-dasharray", "10 4");
