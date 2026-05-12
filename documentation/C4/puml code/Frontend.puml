@@ -3,35 +3,63 @@
 
 title Component Diagram — Browser Frontend (D3.js)
 
-Container_Boundary(spa, "Browser Frontend") {
+Container_Boundary(user_spa, "User Frontend (user.html)") {
 
-    Component(uploader, "File Upload Component", "HTML / JS", "Drag-and-drop or file picker. Posts raw listening history to parse API. Stores returned enriched JSON in app state.")
+    Component(user_uploader, "File Upload Component", "HTML / JS", "Drag-and-drop or file picker. Posts raw listening history to parse API. Stores returned enriched JSON in app state.")
 
-    Component(state, "App State", "JS module", "Holds enriched user events and cohort data in memory for the session. Never persisted to disk or server.")
+    Component(user_state, "App State", "JS module", "Holds enriched user events and cohort data in memory for the session.")
 
-    Component(viz_registry, "Visualisation Registry", "JS module", "Maps visualisation IDs to D3 modules. Drives tab/nav UI. New charts registered here.")
+    Component(user_viz_registry, "Visualisation Registry", "JS module", "Maps visualisation IDs to D3 modules. Drives tab navigation.")
 
-    Component(va_trajectory, "V-A Trajectory Chart", "D3 module", "Plots track sequence as a path on the valence-arousal plane. Colour-encodes time progression.")
+    Component(va_trajectory, "V-A Trajectory Chart", "D3 module", "Plots track sequence on valence-arousal plane. Colour-encodes time progression. Displayed range: -0.5 to 0.5.")
 
-    Component(va_timeseries, "V-A Time Series Chart", "D3 module", "Plots valence and arousal as separate time-series lines over the listening session.")
+    Component(va_timeseries, "V-A Time Series Chart", "D3 module", "Valence and arousal as separate time-series lines with mean + median reference lines. Range: -0.5 to 0.5.")
 
-    Component(cohort_compare, "Cohort Comparison Chart", "D3 module", "Overlays user listening patterns against high-depression and low-depression cohort distributions.")
+    Component(cohort_compare, "Cohort Comparison Chart", "D3 module", "Overlays user listening patterns against reference cohort distributions.")
 
     Component(ms_played, "Listening Duration Chart", "D3 module", "Bar or stream chart of ms_played per track or time bucket.")
+}
 
-    Component(placeholder, "[ Future Visualisation ]", "D3 module slot", "Any new D3 module dropped in and registered appears immediately as a new tab.")
+Container_Boundary(researcher_spa, "Researcher Frontend (researcher.html)") {
+
+    Component(metadata_uploader, "Metadata CSV Uploader", "HTML / JS", "Upload participant metadata CSV (Participant_ID, Age, Depression_Score, etc). Validates Participant_ID field. Stores in app state.")
+
+    Component(file_uploader, "Listening History File Uploader", "HTML / JS", "Drag-and-drop or multi-file picker. Uploads participant listening histories. Matches files to metadata by Participant_ID. Posts to /api/researcher/process.")
+
+    Component(researcher_state, "App State", "JS module", "Holds metadata, enriched participant events, filter settings, and histogram data in memory.")
+
+    Component(researcher_controls, "Control Panel", "HTML / JS", "Participant checkboxes (show/hide). Field threshold filters (Age > 25, Depression_Score < 50, etc). Timeline playback slider (0-100%), play/pause button, speed multiplier (0.5x-4x).")
+
+    Component(participant_selector, "Participant Selector", "HTML / JS", "Checkboxes for each participant. Filters which participants are rendered in all charts.")
+
+    Component(field_filter_panel, "Field Filter Panel", "HTML / JS", "Dynamic threshold controls (> and < operators) for each metadata field. Updates histogram regions and trajectory rendering in real-time.")
+
+    Component(timeline_controls, "Timeline Playback Controls", "HTML / JS", "Normalized progress slider (0-100%), play/pause toggle, reset button, speed multiplier. Synchronizes all participant trajectories.")
+
+    Component(distribution_histogram, "Distribution Histogram Panel", "D3 module", "Raw-value histograms for each metadata field (Age, Depression_Score, Music_Engagement). X-axis = field value, Y-axis = participant count. Hover tooltips show 'Value: X–Y, Count: Z'. Shaded filter regions overlay threshold controls.")
+
+    Component(cohort_trajectory, "Multi-User V-A Trajectory Chart", "D3 module", "Plots each participant's mood trajectory on valence-arousal plane. Colored by participant. Normalized timeline: all participants render proportionally to their event count at the selected progress %. Range: -0.5 to 0.5.")
 }
 
 Container(api, "Parse & Enrich API", "Flask")
 
-Rel(uploader, api, "POST raw file", "HTTP")
-Rel(api, uploader, "Returns enriched JSON")
-Rel(uploader, state, "Writes to app state")
-Rel(state, viz_registry, "Provides data to active chart")
-Rel(viz_registry, va_trajectory, "Mounts / unmounts")
-Rel(viz_registry, va_timeseries, "Mounts / unmounts")
-Rel(viz_registry, cohort_compare, "Mounts / unmounts")
-Rel(viz_registry, ms_played, "Mounts / unmounts")
-Rel(viz_registry, placeholder, "Mounts / unmounts")
+Rel(user_uploader, api, "POST /api/parse: raw listening history file", "HTTP")
+Rel(api, user_uploader, "Returns enriched user events + cohort summaries", "JSON")
+Rel(user_uploader, user_state, "Writes to app state")
+Rel(user_state, user_viz_registry, "Provides data to active chart")
+Rel(user_viz_registry, va_trajectory, "Mounts / unmounts")
+Rel(user_viz_registry, va_timeseries, "Mounts / unmounts")
+Rel(user_viz_registry, cohort_compare, "Mounts / unmounts")
+Rel(user_viz_registry, ms_played, "Mounts / unmounts")
+
+Rel(metadata_uploader, researcher_state, "Parses CSV, stores metadata")
+Rel(file_uploader, api, "POST /api/researcher/process: files + metadata", "HTTP")
+Rel(api, file_uploader, "Returns enriched participant events", "JSON")
+Rel(file_uploader, researcher_state, "Writes enriched data to app state")
+Rel(participant_selector, researcher_state, "Filters selected participants")
+Rel(field_filter_panel, researcher_state, "Sets threshold filters, updates histograms")
+Rel(timeline_controls, researcher_state, "Updates progress %, play/pause state")
+Rel(researcher_state, distribution_histogram, "Provides metadata + filter settings")
+Rel(researcher_state, cohort_trajectory, "Provides participant events + progress %")
 
 @enduml

@@ -3,17 +3,22 @@
 
 title System Context — Music Listening Analysis Tool
 
-Person(user, "Researcher / User", "Uploads their listening history (tracks + timestamps) and views psychological visualisations")
+Person(end_user, "Individual User", "Uploads their own listening history (tracks + timestamps) and views personal psychological visualisations (mood trajectory, time-series, cohort comparison)")
+Person(researcher, "Researcher", "Uploads multiple participant listening histories + metadata (demographics, clinical scores). Filters participants, analyzes cohort distributions, compares trajectories with normalized timeline playback.")
 
-System(system, "Listening Analysis System", "Parses user listening history, looks up VA and other musical attributes from an internal dataset, and renders comparative visualisations against reference cohorts")
+System(system, "Listening Analysis System", "Parses user/participant listening histories, enriches with valence-arousal attributes from internal dataset. Renders individual or cohort visualisations with interactive controls.")
 
 System_Ext(spotify, "Spotify Takeout", "External data source — JSON export")
 System_Ext(ytmusic, "YT Music Takeout", "External data source — JSON export")
 System_Ext(generic, "Generic CSV / TSV", "User-exported listening data in tabular format")
 
-Rel(user, system, "Uploads listening history file, views visualisations", "HTTPS / browser")
-Rel(spotify, user, "User downloads their data export")
-Rel(ytmusic, user, "User downloads their data export")
-Rel(generic, user, "User prepares CSV export")
+Rel(end_user, system, "Uploads personal listening history file, views personal insights", "HTTPS / browser")
+Rel(researcher, system, "Uploads participant metadata CSV + listening history files, filters & analyzes cohort", "HTTPS / browser")
+Rel(spotify, end_user, "User downloads their data export")
+Rel(ytmusic, end_user, "User downloads their data export")
+Rel(generic, end_user, "User prepares CSV export")
+Rel(spotify, researcher, "Researcher collects participant data exports")
+Rel(ytmusic, researcher, "Researcher collects participant data exports")
+Rel(generic, researcher, "Researcher collects participant data exports")
 
 @enduml

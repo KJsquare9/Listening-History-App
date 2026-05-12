@@ -5,9 +5,13 @@ title Component Diagram — Parse & Enrich API (Flask)
 
 Container_Boundary(api, "Parse & Enrich API") {
 
-    Component(router, "Upload Router", "Flask Blueprint", "Accepts multipart file upload. Detects format from filename or MIME type. Delegates to parser registry.")
+    Component(user_router, "User Upload Router", "Flask Blueprint (/api/parse)", "Accepts single-user listening history file. Detects format. Delegates to parser registry. Returns enriched events + cohort comparison.")
 
-    Component(registry, "Parser Registry", "Python module", "Maps format identifiers (spotify, ytmusic, csv, ...) to parser classes. New formats registered here with zero changes elsewhere.")
+    Component(researcher_router, "Researcher Router", "Flask Blueprint (/api/researcher/*)", "Handles /api/researcher/demo (return demo dataset) and /api/researcher/process (upload + process multi-participant data).")
+
+    Component(metadata_validator, "Metadata Validator", "Python module", "Validates researcher metadata CSV. Checks for required fields (Participant_ID, etc). Matches participant files to metadata rows by Participant_ID.")
+
+    Component(registry, "Parser Registry", "Python module", "Maps format identifiers (spotify, ytmusic, csv, ...) to parser classes. Used by both user and researcher routes.")
 
     Component(spotify_parser, "Spotify Parser", "Parser plugin", "Reads Spotify StreamingHistory JSON. Outputs NormalisedEvent list: track, artist, timestamp, ms_played.")
 
@@ -15,26 +19,43 @@ Container_Boundary(api, "Parse & Enrich API") {
 
     Component(csv_parser, "Generic CSV Parser", "Parser plugin", "Reads tabular track / timestamp / ms_played data. Outputs NormalisedEvent list.")
 
-    Component(enricher, "Track Enricher", "Python module", "Takes NormalisedEvent list. For each event, queries the Song Dataset by track and artist name. Attaches valence, arousal, and any other available attributes. Unmatched tracks are flagged, not dropped.")
+    Component(enricher, "Track Enricher", "Python module", "Takes NormalisedEvent list(s). For each event, looks up track/artist in Song Dataset. Attaches valence (0-1), arousal (0-1), and other attributes. Flags unmatched tracks; does not drop.")
 
-    Component(cohort_loader, "Cohort Data Loader", "Python module", "Loads and pre-processes reference cohort listening histories and depression scale scores. Caches in memory on first load.")
+    Component(cohort_loader, "Cohort Data Loader", "Python module", "Loads reference and demo cohort listening histories with clinical metadata. Caches in memory on first load. Provides comparison data for user and researcher modes.")
 
-    Component(serialiser, "Response Serialiser", "Python module", "Combines enriched user events and cohort summary data into a single JSON payload for the frontend.")
+    Component(demo_loader, "Demo Dataset Loader", "Python module", "Loads pre-processed demo dataset (10 participants, metadata, enriched events). Used by /api/researcher/demo endpoint for testing.")
+
+    Component(user_serialiser, "User Response Serialiser", "Python module", "Combines enriched single-user events and reference cohort summaries into JSON payload for user frontend.")
+
+    Component(researcher_serialiser, "Researcher Response Serialiser", "Python module", "Combines enriched participant events, metadata, raw-value histograms (age, depression score, engagement), and cohort summary into JSON payload for researcher frontend.")
 }
 
-ContainerDb(song_db, "Song Dataset", "Flat files")
-ContainerDb(refdata, "Cohort Reference Data", "Flat files")
+ContainerDb(song_db, "Song Dataset", "Flat files (CSV/XLSX)")
+ContainerDb(refdata, "Reference Cohort Data", "Flat files (CSV/XLSX)")
+ContainerDb(demo_data, "Demo Researcher Dataset", "Flat files")
 
-Rel(router, registry, "Looks up parser by format ID")
-Rel(registry, spotify_parser, "Instantiates on Spotify upload")
-Rel(registry, yt_parser, "Instantiates on YT Music upload")
-Rel(registry, csv_parser, "Instantiates on CSV upload")
+Rel(user_router, registry, "Looks up parser by format ID")
+Rel(researcher_router, metadata_validator, "Validates metadata CSV")
+Rel(researcher_router, registry, "Looks up parsers for participant files")
+Rel(metadata_validator, researcher_router, "Returns validated metadata rows")
+
+Rel(registry, spotify_parser, "Instantiates on Spotify format")
+Rel(registry, yt_parser, "Instantiates on YT Music format")
+Rel(registry, csv_parser, "Instantiates on CSV format")
+
 Rel(spotify_parser, enricher, "Passes NormalisedEvent list")
 Rel(yt_parser, enricher, "Passes NormalisedEvent list")
 Rel(csv_parser, enricher, "Passes NormalisedEvent list")
-Rel(enricher, song_db, "Looks up track attributes")
-Rel(cohort_loader, refdata, "Reads cohort files")
-Rel(enricher, serialiser, "Enriched user events")
-Rel(cohort_loader, serialiser, "Cohort summary data")
+
+Rel(enricher, song_db, "Looks up track attributes by name/artist")
+Rel(enricher, user_serialiser, "Enriched user events")
+Rel(enricher, researcher_serialiser, "Enriched participant events")
+
+Rel(cohort_loader, refdata, "Reads reference cohort files")
+Rel(cohort_loader, user_serialiser, "Cohort summaries")
+Rel(cohort_loader, researcher_serialiser, "Cohort summaries")
+
+Rel(demo_loader, demo_data, "Loads demo dataset")
+Rel(demo_loader, researcher_serialiser, "Returns demo events + metadata")
 
 @enduml

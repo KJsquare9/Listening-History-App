@@ -3,23 +3,32 @@
 
 title Container Diagram — Listening Analysis System
 
-Person(user, "User", "Uploads listening history file, views charts")
+Person(end_user, "Individual User", "Uploads listening history, views personal insights")
+Person(researcher, "Researcher", "Uploads participant data + metadata, filters, analyzes cohorts")
 
 System_Boundary(sys, "Listening Analysis System") {
 
-    Container(spa, "Browser Frontend", "HTML + JS + D3.js", "Handles file upload, calls parse API, renders all visualisations client-side. Receives only enriched JSON — never handles raw musical attribute data.")
+    Container(user_spa, "User Frontend", "HTML + JS + D3.js", "Single-user mode: file upload, personal mood trajectory, time-series, cohort comparison, listening duration. Receives enriched JSON. Never handles raw attributes.")
 
-    Container(api, "Parse & Enrich API", "Python / Flask", "Accepts raw listening history files. Routes to the correct parser. Looks up each track in the internal song dataset to attach VA and other attributes. Returns enriched normalised JSON. Stateless — holds no user data between requests.")
+    Container(researcher_spa, "Researcher Frontend", "HTML + JS + D3.js", "Multi-user mode: metadata CSV upload, participant file upload, distribution histograms, V-A trajectories with normalized timeline playback (0-100%), field-based filtering.")
 
-    ContainerDb(song_db, "Song Dataset", "Flat files (CSV / XLSX)", "Internal dataset mapping track and artist names to musical attributes: valence, arousal, and any other scores. Maintained by the researcher. Read-only at runtime.")
+    Container(api, "Parse & Enrich API", "Python / Flask", "Stateless API. Routes to correct parser based on file format. Enriches tracks with valence-arousal from song dataset. Handles single-user and researcher endpoints. Returns enriched normalised JSON. Optionally loads demo dataset for researcher testing.")
 
-    ContainerDb(refdata, "Cohort Reference Data", "Flat files (CSV / XLSX)", "Listening histories of reference study participants annotated with depression scale scores. Read-only at runtime.")
+    ContainerDb(song_db, "Song Dataset", "Flat files (CSV / XLSX)", "Internal dataset: track/artist → valence, arousal, other musical attributes. Read-only at runtime.")
+
+    ContainerDb(refdata, "Cohort Reference Data", "Flat files (CSV / XLSX)", "Listening histories of reference participants + clinical metadata (depression scores, etc). Read-only at runtime.")
+
+    ContainerDb(demo_data, "Demo Researcher Dataset", "Flat files (CSV + participant CSVs)", "Sample 10-participant cohort with metadata.csv (age, gender, depression scores, etc) and listening histories. Used for /api/researcher/demo endpoint.")
 }
 
-Rel(user, spa, "Visits in browser, uploads file", "HTTPS")
-Rel(spa, api, "POST raw listening history file", "HTTP")
-Rel(api, spa, "Returns enriched listening events + cohort summaries", "JSON")
+Rel(end_user, user_spa, "Visits in browser, uploads listening history file", "HTTPS")
+Rel(researcher, researcher_spa, "Visits in browser, uploads metadata CSV + participant files", "HTTPS")
+Rel(user_spa, api, "POST /api/parse: raw listening history file", "HTTP")
+Rel(researcher_spa, api, "GET /api/researcher/demo or POST /api/researcher/process", "HTTP")
+Rel(api, user_spa, "Returns enriched user events + cohort summaries", "JSON")
+Rel(api, researcher_spa, "Returns enriched participant events, metadata, filtered histograms", "JSON")
 Rel(api, song_db, "Looks up track attributes by name / artist", "File I/O")
-Rel(api, refdata, "Reads cohort listening histories and scale scores", "File I/O")
+Rel(api, refdata, "Reads reference cohort data", "File I/O")
+Rel(api, demo_data, "Loads demo dataset for testing", "File I/O")
 
 @enduml
