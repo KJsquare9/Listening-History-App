@@ -956,6 +956,78 @@ p {
   font-size: 0.92rem;
 }
 
+.research-compare-panel {
+  grid-column: 1 / -1;
+}
+
+.research-compare-panel__note {
+  margin-top: -4px;
+}
+
+.research-line-chart-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.research-line-chart {
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.research-line-chart__svg {
+  display: block;
+  min-width: 840px;
+  width: 100%;
+  height: auto;
+}
+
+.research-line-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.research-line-grid--vertical {
+  stroke-dasharray: 3 5;
+}
+
+.research-line-label {
+  font-size: 10px;
+}
+
+.research-line-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.research-line-legend__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: min(230px, 100%);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.research-line-legend__label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.research-line-legend__label b {
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+.research-line-legend__label small {
+  color: var(--soft);
+  font-size: 0.77rem;
+  line-height: 1.35;
+}
+
 .legend-swatch {
   width: 12px;
   height: 12px;

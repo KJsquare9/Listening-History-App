@@ -344,8 +344,8 @@ function renderResearchSummary(data, sourceLabel) {
   const cards = [
     { label: "Participants", value: stats.participantCount, hint: sourceLabel ?? "Selected research sample" },
     { label: "Matched tracks", value: `${stats.matchedEvents}/${stats.totalEvents}`, hint: `${formatRatio(stats.matchRate)} usable for V-A analysis` },
-    { label: "Mean V/A", value: `${formatNumber(stats.meanValence)}/${formatNumber(stats.meanArousal)}`, hint: "Average emotional coordinate" },
-    { label: "Volatility", value: formatNumber(stats.meanVolatility), hint: "Mean step distance between matched plays" },
+    { label: "Avg valence", value: formatNumber(stats.meanValence), hint: "Average positivity across matched plays" },
+    { label: "Avg arousal", value: formatNumber(stats.meanArousal), hint: "Average energy across matched plays" },
   ];
 
   elements.summaryGrid.replaceChildren();
@@ -373,97 +373,170 @@ function renderMetadataAnalysis(data, fields) {
     elements.analysisGrid.innerHTML = '<div class="empty-message">Select metadata fields to compare participant groups.</div>';
     return;
   }
+  const numericFields = fields.filter((field) => getFieldType(field, state.metadata) === "numeric");
+  const skippedFields = fields.filter((field) => getFieldType(field, state.metadata) !== "numeric");
 
-  fields.forEach((field) => {
-    const panel = document.createElement("article");
-    panel.className = "chart-panel metadata-panel";
-    const type = getFieldType(field, state.metadata);
-    panel.innerHTML = `
-      <div class="chart-panel__title">${escapeHtml(field)}</div>
-      <div class="chart-panel__note">${type === "numeric" ? "Normalized distribution across selected participants." : "Category counts across selected participants."}</div>
-    `;
+  const panel = document.createElement("article");
+  panel.className = "chart-panel metadata-panel research-compare-panel";
+  panel.innerHTML = `
+    <div class="chart-panel__title">Normalized metadata comparison</div>
+    <div class="chart-panel__note">All values are normalized to a 0-1 scale within each feature. Each line represents one selected field, and each dot is a participant.</div>
+  `;
 
-    if (type === "numeric") {
-      renderNumericField(panel, data.participants, field);
-    } else {
-      renderCategoricalField(panel, data.participants, field);
-    }
-
+  if (!numericFields.length) {
+    panel.insertAdjacentHTML("beforeend", '<div class="empty-message empty-message--compact">Select at least one numeric field to plot. Categorical fields are listed in the controls but are not drawn in this line chart.</div>');
     elements.analysisGrid.append(panel);
-  });
-}
-
-function renderNumericField(panel, participants, field) {
-  const values = participants
-    .map((participant) => ({ id: participant.id, value: parseFloat(participant.metadata?.[field]) }))
-    .filter((entry) => Number.isFinite(entry.value));
-
-  if (!values.length) {
-    panel.insertAdjacentHTML("beforeend", '<div class="empty-message empty-message--compact">No numeric values available.</div>');
     return;
   }
 
-  const rawValues = values.map((entry) => entry.value);
-  const min = Math.min(...rawValues);
-  const max = Math.max(...rawValues);
-  const mean = rawValues.reduce((sum, value) => sum + value, 0) / rawValues.length;
-  const range = max - min || 1;
-  const binCount = 8;
-  const bins = Array.from({ length: binCount }, (_, index) => ({
-    label: `${Math.round((index / binCount) * 100)}-${Math.round(((index + 1) / binCount) * 100)}%`,
-    count: 0,
-  }));
+  if (skippedFields.length) {
+    const note = document.createElement("div");
+    note.className = "chart-panel__note research-compare-panel__note";
+    note.textContent = `Categorical fields not plotted: ${skippedFields.join(", ")}.`;
+    panel.append(note);
+  }
 
-  values.forEach((entry) => {
-    const normalized = (entry.value - min) / range;
-    const index = Math.min(binCount - 1, Math.floor(normalized * binCount));
-    bins[index].count += 1;
-  });
-
-  const maxCount = Math.max(1, ...bins.map((bin) => bin.count));
-  const chart = document.createElement("div");
-  chart.className = "research-bars";
-  bins.forEach((bin) => {
-    const bar = document.createElement("div");
-    bar.className = "research-bar";
-    bar.style.height = `${Math.max(4, (bin.count / maxCount) * 100)}%`;
-    bar.title = `${bin.label}: ${bin.count}`;
-    chart.append(bar);
-  });
-
-  const stats = document.createElement("div");
-  stats.className = "research-mini-stats";
-  stats.innerHTML = `
-    <div><span>Min</span><b>${formatNumber(min)}</b></div>
-    <div><span>Mean</span><b>${formatNumber(mean)}</b></div>
-    <div><span>Max</span><b>${formatNumber(max)}</b></div>
-  `;
-  panel.append(chart, stats);
+  renderNormalizedFieldComparison(panel, data.participants, numericFields);
+  elements.analysisGrid.append(panel);
 }
 
-function renderCategoricalField(panel, participants, field) {
-  const counts = new Map();
-  participants.forEach((participant) => {
-    const value = participant.metadata?.[field] || "Unknown";
-    counts.set(value, (counts.get(value) ?? 0) + 1);
+function renderNormalizedFieldComparison(panel, participants, fields) {
+  const colors = ["#68d2c9", "#f2b66d", "#ff8b8b", "#7cf0a6", "#b19cd9", "#87ceeb", "#ffa07a", "#ffd700", "#ff69b4", "#00ff7f"];
+  const series = fields
+    .map((field, index) => {
+      const values = participants
+        .map((participant) => {
+          const rawValue = parseFloat(participant.metadata?.[field]);
+          return Number.isFinite(rawValue) ? rawValue : null;
+        })
+        .filter((value) => value != null);
+
+      if (!values.length) return null;
+
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+      const points = participants
+        .map((participant) => {
+          const rawValue = parseFloat(participant.metadata?.[field]);
+          if (!Number.isFinite(rawValue)) return null;
+          return {
+            participantId: participant.id,
+            rawValue,
+            normalizedValue: (rawValue - min) / range,
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        field,
+        min,
+        max,
+        points,
+        color: colors[index % colors.length],
+      };
+    })
+    .filter(Boolean);
+
+  if (!series.length) {
+    panel.insertAdjacentHTML("beforeend", '<div class="empty-message empty-message--compact">No numeric values were available for the selected fields.</div>');
+    return;
+  }
+
+  const shell = document.createElement("div");
+  shell.className = "research-line-chart-shell";
+
+  const chartWrap = document.createElement("div");
+  chartWrap.className = "research-line-chart";
+  shell.append(chartWrap);
+
+  const legend = document.createElement("div");
+  legend.className = "research-line-legend";
+  series.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "research-line-legend__item";
+    item.innerHTML = `
+      <span class="legend-swatch" style="background:${entry.color}"></span>
+      <span class="research-line-legend__label">
+        <b>${escapeHtml(entry.field)}</b>
+        <small>${formatNumber(entry.min)} to ${formatNumber(entry.max)} on a normalized 0-1 scale</small>
+      </span>
+    `;
+    legend.append(item);
   });
 
-  const maxCount = Math.max(1, ...counts.values());
-  const list = document.createElement("div");
-  list.className = "category-list";
-  [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .forEach(([label, count]) => {
-      const row = document.createElement("div");
-      row.className = "category-row";
-      row.innerHTML = `
-        <span>${escapeHtml(label)}</span>
-        <div class="category-row__bar"><i style="width:${(count / maxCount) * 100}%"></i></div>
-        <b>${count}</b>
-      `;
-      list.append(row);
-    });
-  panel.append(list);
+  const participantIds = participants.map((participant) => participant.id);
+  const margin = { top: 24, right: 24, bottom: 100, left: 64 };
+  const width = Math.max(840, participantIds.length * 88);
+  const height = 420;
+
+  const svg = d3.select(chartWrap).append("svg").attr("viewBox", `0 0 ${width} ${height}`).classed("research-line-chart__svg", true);
+  const x = d3.scalePoint().domain(participantIds).range([margin.left, width - margin.right]).padding(0.45);
+  const y = d3.scaleLinear().domain([0, 1]).range([height - margin.bottom, margin.top]);
+
+  for (let index = 0; index <= 5; index += 1) {
+    const value = index / 5;
+    svg.append("line").attr("x1", margin.left).attr("x2", width - margin.right).attr("y1", y(value)).attr("y2", y(value)).attr("class", "research-line-grid");
+    svg.append("text").attr("x", margin.left - 10).attr("y", y(value) + 4).attr("text-anchor", "end").attr("class", "svg-label").text(value.toFixed(1));
+  }
+
+  participantIds.forEach((participantId) => {
+    svg.append("line").attr("x1", x(participantId)).attr("x2", x(participantId)).attr("y1", margin.top).attr("y2", height - margin.bottom).attr("class", "research-line-grid research-line-grid--vertical");
+    svg
+      .append("text")
+      .attr("x", x(participantId))
+      .attr("y", height - margin.bottom + 22)
+      .attr("text-anchor", "end")
+      .attr("transform", `rotate(-32 ${x(participantId)} ${height - margin.bottom + 22})`)
+      .attr("class", "svg-label research-line-label")
+      .text(participantId);
+  });
+
+  const line = d3
+    .line()
+    .defined((point) => point && Number.isFinite(point.normalizedValue))
+    .x((point) => x(point.participantId))
+    .y((point) => y(point.normalizedValue))
+    .curve(d3.curveMonotoneX);
+
+  series.forEach((entry) => {
+    const group = svg.append("g").attr("class", "research-line-series");
+    group
+      .append("path")
+      .datum(entry.points)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", entry.color)
+      .attr("stroke-width", 2.8)
+      .attr("stroke-linecap", "round")
+      .attr("stroke-linejoin", "round")
+      .attr("opacity", 0.88);
+
+    group
+      .selectAll("circle")
+      .data(entry.points)
+      .enter()
+      .append("circle")
+      .attr("cx", (point) => x(point.participantId))
+      .attr("cy", (point) => y(point.normalizedValue))
+      .attr("r", 4.5)
+      .attr("fill", entry.color)
+      .attr("stroke", "rgba(255,255,255,0.8)")
+      .attr("stroke-width", 0.8)
+      .append("title")
+      .text((point) => `${entry.field} · ${point.participantId}\nRaw ${formatNumber(point.rawValue)} · Normalized ${formatNumber(point.normalizedValue)}`);
+  });
+
+  svg.append("text").attr("x", margin.left + (width - margin.left - margin.right) / 2).attr("y", height - 4).attr("text-anchor", "middle").attr("class", "svg-label").text("Participants");
+  svg
+    .append("text")
+    .attr("transform", `translate(20 ${margin.top + (height - margin.top - margin.bottom) / 2}) rotate(-90)`)
+    .attr("text-anchor", "middle")
+    .attr("class", "svg-label")
+    .text("Normalized value (0-1)");
+
+  shell.append(legend);
+  panel.append(shell);
 }
 
 function renderTrajectories(data) {
