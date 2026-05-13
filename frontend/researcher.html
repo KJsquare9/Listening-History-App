@@ -560,9 +560,12 @@
                 </p>
               </div>
               <input type="file" id="fileInput" class="upload-zone__file-input" webkitdirectory multiple />
-              <input type="file" id="csvInput" class="upload-zone__file-input" accept=".csv" />
+              <input type="file" id="csvInput" class="upload-zone__file-input" accept=".csv,.json,.tsv,application/json,text/csv,text/tab-separated-values" multiple />
               <button class="button button--primary upload-zone__button" id="selectFilesBtn">
-                Select Files
+                Select CSV Files
+              </button>
+              <button class="button button--secondary upload-zone__button" id="selectFolderBtn" style="margin-top: var(--space-2);">
+                Select Folder
               </button>
             </div>
 

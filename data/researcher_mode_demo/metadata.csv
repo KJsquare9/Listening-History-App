@@ -1,0 +1,9 @@
+Participant_ID,Age,Gender,Depression_Score,Anxiety_Score,Music_Engagement,Therapy_Duration_Weeks,Sleep_Quality,Study_Group,Primary_Genre
+rm_001,19,F,18,24,8,2,7,low_symptom,pop
+rm_002,21,M,34,38,7,5,6,moderate_symptom,indie
+rm_003,20,F,58,61,5,10,4,high_symptom,pop
+rm_004,23,Nonbinary,72,69,4,14,3,high_symptom,film
+rm_005,22,F,27,31,9,4,8,low_symptom,punjabi
+rm_006,24,M,46,49,6,8,5,moderate_symptom,pop
+rm_007,18,F,63,57,5,12,4,high_symptom,indie
+rm_008,25,M,21,28,8,3,7,low_symptom,film

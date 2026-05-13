@@ -19,7 +19,9 @@ const state = {
 const elements = {
   uploadZone: document.getElementById("uploadZone"),
   fileInput: document.getElementById("fileInput"),
+  csvInput: document.getElementById("csvInput"),
   selectFilesBtn: document.getElementById("selectFilesBtn"),
+  selectFolderBtn: document.getElementById("selectFolderBtn"),
   demoBtn: document.getElementById("demoBtn"),
   statusMessage: document.getElementById("statusMessage"),
   analysisSection: document.getElementById("analysisSection"),
@@ -38,9 +40,11 @@ const elements = {
   resetResearchFilters: document.getElementById("resetResearchFilters"),
 };
 
-elements.selectFilesBtn.addEventListener("click", () => elements.fileInput.click());
+elements.selectFilesBtn.addEventListener("click", () => elements.csvInput.click());
+elements.selectFolderBtn.addEventListener("click", () => elements.fileInput.click());
 elements.demoBtn.addEventListener("click", loadDemo);
-elements.fileInput.addEventListener("change", (event) => handleFiles(event.target.files));
+elements.fileInput.addEventListener("change", (event) => handleFiles(event.target.files, event.target));
+elements.csvInput.addEventListener("change", (event) => handleFiles(event.target.files, event.target));
 
 elements.uploadZone.addEventListener("dragover", (event) => {
   event.preventDefault();
@@ -73,7 +77,7 @@ elements.resetResearchFilters.addEventListener("click", () => {
 
 wireResizeHandling();
 
-async function handleFiles(fileList) {
+async function handleFiles(fileList, sourceInput = null) {
   const requestId = beginRequest("Processing research files...");
 
   try {
@@ -123,6 +127,9 @@ async function handleFiles(fileList) {
       showStatus(`Upload error: ${error.message}`, "error");
     }
   } finally {
+    if (sourceInput) {
+      sourceInput.value = "";
+    }
     if (isCurrentRequest(requestId)) {
       finishRequest();
     }
@@ -161,6 +168,7 @@ function beginRequest(message) {
   showStatus(message, "success");
   elements.demoBtn.disabled = true;
   elements.selectFilesBtn.disabled = true;
+  elements.selectFolderBtn.disabled = true;
   return requestId;
 }
 
@@ -171,6 +179,7 @@ function isCurrentRequest(requestId) {
 function finishRequest() {
   elements.demoBtn.disabled = false;
   elements.selectFilesBtn.disabled = false;
+  elements.selectFolderBtn.disabled = false;
 }
 
 function applyDataset(data, sourceLabel) {

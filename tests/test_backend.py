@@ -165,6 +165,42 @@ def test_researcher_process_accepts_bundled_demo_folder_filenames():
     assert all(participant["events"] for participant in payload["participants"])
 
 
+def test_researcher_mode_demo_folder_uploads_cleanly():
+    app = create_app()
+    client = app.test_client()
+    demo_path = DATA_PATH / "researcher_mode_demo"
+    participant_paths = sorted(demo_path.glob("rm_*.csv"))
+
+    response = client.post(
+        "/api/researcher/process",
+        data={
+            "metadata": (io.BytesIO((demo_path / "metadata.csv").read_bytes()), "researcher_mode_demo/metadata.csv"),
+            "listening_files": [
+                (io.BytesIO(path.read_bytes()), f"researcher_mode_demo/{path.name}")
+                for path in participant_paths
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["count"] == 8
+    assert payload["metadata_fields"] == [
+        "Age",
+        "Gender",
+        "Depression_Score",
+        "Anxiety_Score",
+        "Music_Engagement",
+        "Therapy_Duration_Weeks",
+        "Sleep_Quality",
+        "Study_Group",
+        "Primary_Genre",
+    ]
+    assert all(participant["summary"]["matched_events"] >= 12 for participant in payload["participants"])
+
+
 def test_csv_parser_preserves_warnings_for_malformed_rows():
     parser = CSVParser()
     csv_text = """song,artists,played_at,listened_ms\nLove Story,Taylor Swift,2024-01-01T10:00:00Z,180000\nBroken,Taylor Swift,not-a-date,120000\n,Missing Track,2024-01-01,1000\n"""
