@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import csv
 from io import StringIO
-from pathlib import Path
+from pathlib import Path, PurePath
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 
 researcher_bp = Blueprint("researcher", __name__, url_prefix="/api/researcher")
 
@@ -41,14 +41,15 @@ def demo_researcher_data():
             participant_file = data_path / f"{participant_id}.csv"
             
             if not participant_file.exists():
-                print(f"Warning: Participant file not found for {participant_id}")
+                current_app.logger.warning("demo_participant_file_missing participant_id=%s request_id=%s", participant_id, getattr(g, "request_id", ""))
                 continue
             
             try:
                 file_content = participant_file.read_text(encoding="utf-8")
                 format_id = registry.detect_format(str(participant_file), file_content)
                 parser = registry.get(format_id)
-                events = parser.parse(file_content, filename=str(participant_file))
+                parse_result = parser.parse_with_diagnostics(file_content, filename=str(participant_file))
+                events = parse_result.events
                 
                 if not events:
                     continue
@@ -60,23 +61,25 @@ def demo_researcher_data():
                     "events": [event.to_dict() for event in enriched_events],
                     "metadata": row,
                     "summary": summary,
+                    "diagnostics": parse_result.diagnostics(),
                 })
             except Exception as e:
-                print(f"Error processing demo participant {participant_id}: {str(e)}")
+                current_app.logger.exception("demo_participant_processing_failed participant_id=%s request_id=%s", participant_id, getattr(g, "request_id", ""))
                 continue
         
         if not participants:
             return jsonify({"error": "No demo participants could be processed"}), 400
         
         return jsonify({
+            "ok": True,
             "participants": participants,
             "metadata_fields": [k for k in metadata[0].keys() if k != PARTICIPANT_ID_FIELD],
             "count": len(participants),
         }), 200
     
     except Exception as e:
-        print(f"Demo data error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.exception("researcher_demo_failed request_id=%s", getattr(g, "request_id", ""))
+        return jsonify({"ok": False, "error": {"code": "researcher_demo_failed", "message": str(e), "status": 500}}), 500
 
 @researcher_bp.route("/process", methods=["POST"])
 def process_researcher_data():
@@ -115,7 +118,7 @@ def process_researcher_data():
         
         # Validate file names match Participant_IDs
         participant_ids = {row[PARTICIPANT_ID_FIELD] for row in metadata if row.get(PARTICIPANT_ID_FIELD)}
-        file_names = set(f.filename.rsplit(".", 1)[0] for f in listening_files)
+        file_names = {_participant_id_from_filename(f.filename) for f in listening_files if f.filename}
         
         missing = participant_ids - file_names
         extra = file_names - participant_ids
@@ -133,13 +136,14 @@ def process_researcher_data():
         for listening_file in listening_files:
             try:
                 # Get participant ID from filename
-                participant_id = listening_file.filename.rsplit(".", 1)[0]
+                participant_id = _participant_id_from_filename(listening_file.filename)
                 
                 # Parse listening history using registry
                 file_content = listening_file.read().decode("utf-8-sig", errors="replace")
                 format_id = registry.detect_format(listening_file.filename, file_content)
                 parser = registry.get(format_id)
-                events = parser.parse(file_content, filename=listening_file.filename)
+                parse_result = parser.parse_with_diagnostics(file_content, filename=listening_file.filename)
+                events = parse_result.events
                 
                 if not events:
                     continue
@@ -158,24 +162,26 @@ def process_researcher_data():
                     "events": [event.to_dict() for event in enriched_events],
                     "metadata": participant_meta,
                     "summary": summary,
+                    "diagnostics": parse_result.diagnostics(),
                 })
             except Exception as e:
                 # Log error but continue with other participants
-                print(f"Error processing {listening_file.filename}: {str(e)}")
+                current_app.logger.exception("participant_processing_failed filename=%s request_id=%s", listening_file.filename, getattr(g, "request_id", ""))
                 continue
         
         if not participants:
             return jsonify({"error": "No participants could be processed successfully"}), 400
         
         return jsonify({
+            "ok": True,
             "participants": participants,
             "metadata_fields": [k for k in metadata[0].keys() if k != PARTICIPANT_ID_FIELD],
             "count": len(participants),
         }), 200
     
     except Exception as e:
-        print(f"Researcher data processing error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.exception("researcher_processing_failed request_id=%s", getattr(g, "request_id", ""))
+        return jsonify({"ok": False, "error": {"code": "researcher_processing_failed", "message": str(e), "status": 500}}), 500
 
 
 def parse_csv(text: str) -> list[dict[str, str]]:
@@ -183,7 +189,11 @@ def parse_csv(text: str) -> list[dict[str, str]]:
     if not text.strip():
         return []
 
-    reader = csv.DictReader(StringIO(text))
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",\t;")
+    except csv.Error:
+        dialect = csv.excel
+    reader = csv.DictReader(StringIO(text), dialect=dialect)
     return [
         {
             (key or "").strip(): (value or "").strip()
@@ -193,3 +203,9 @@ def parse_csv(text: str) -> list[dict[str, str]]:
         for row in reader
         if any((value or "").strip() for value in row.values())
     ]
+
+
+def _participant_id_from_filename(filename: str) -> str:
+    """Return the file stem while tolerating browser folder-upload paths."""
+    clean_name = PurePath(str(filename).replace("\\", "/")).name
+    return clean_name.rsplit(".", 1)[0]

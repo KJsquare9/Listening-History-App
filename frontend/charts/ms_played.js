@@ -1,6 +1,9 @@
 import { chartLayout, clearNode, createChartShell, makeTooltip, formatCompact, formatDuration } from "./shared.js";
 
+let cleanup = () => {};
+
 export function mount(container, payload) {
+  cleanup();
   clearNode(container);
   const events = [...(payload.events ?? [])].sort((a, b) => b.ms_played - a.ms_played).slice(0, 12);
   const { shell, chart } = createChartShell({
@@ -42,6 +45,7 @@ export function mount(container, payload) {
   gradient.append("stop").attr("offset", "100%").attr("stop-color", "#f2b66d");
 
   const tooltip = makeTooltip();
+  cleanup = () => tooltip.destroy();
   svg
     .append("g")
     .selectAll("rect")
@@ -81,4 +85,7 @@ export function mount(container, payload) {
   tooltip.hide();
 }
 
-export function unmount() {}
+export function unmount() {
+  cleanup();
+  cleanup = () => {};
+}

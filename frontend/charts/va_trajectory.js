@@ -1,6 +1,9 @@
 import { createChartShell, makeTooltip, formatCompact, formatMoodValue, shiftMoodValue } from "./shared.js";
 
+let cleanup = () => {};
+
 export function mount(container, payload) {
+  cleanup();
   container.innerHTML = "";
   const matched = payload.matched_events ?? [];
 
@@ -92,6 +95,10 @@ export function mount(container, payload) {
   const pointsGroup = svg.append("g");
   const currentPointGroup = svg.append("g");
   const tooltip = makeTooltip();
+  cleanup = () => {
+    state.isPlaying = false;
+    tooltip.destroy();
+  };
 
   const line = d3.line().x((d) => x(shiftMoodValue(d.valence))).y((d) => y(shiftMoodValue(d.arousal))).curve(d3.curveCatmullRom.alpha(0.5));
 
@@ -287,4 +294,7 @@ export function mount(container, payload) {
   updateDisplay(0);
 }
 
-export function unmount() {}
+export function unmount() {
+  cleanup();
+  cleanup = () => {};
+}

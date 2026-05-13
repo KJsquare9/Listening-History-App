@@ -1,5 +1,7 @@
 import { chartLayout, clearNode, createChartShell, makeTooltip, formatMoodValue, shiftMoodValue } from "./shared.js";
 
+let cleanup = () => {};
+
 function summarize(events) {
   const matched = events.filter((event) => event.matched);
   return {
@@ -11,6 +13,7 @@ function summarize(events) {
 }
 
 export function mount(container, payload) {
+  cleanup();
   clearNode(container);
   const userEvents = payload.matched_events ?? [];
   const referenceGroups = payload.reference_groups ?? payload.cohorts ?? {};
@@ -70,6 +73,7 @@ export function mount(container, payload) {
     .text("Arousal (-0.5 to 0.5)");
 
   const tooltip = makeTooltip();
+  cleanup = () => tooltip.destroy();
   const layer = svg.append("g");
 
   const series = {
@@ -154,4 +158,7 @@ export function mount(container, payload) {
   shell.append(summaryStrip);
 }
 
-export function unmount() {}
+export function unmount() {
+  cleanup();
+  cleanup = () => {};
+}

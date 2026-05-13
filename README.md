@@ -14,6 +14,7 @@ The system is split into two modes:
 - Single user listening history analysis
 - **Flask API (Python)** — accepts listening history file uploads, routes them through a parser registry, looks up each track in the internal song dataset to attach valence, arousal, and other attributes, and returns a single enriched JSON payload. Stateless: no user data is stored.
 - **Browser frontend (HTML + D3.js)** — receives the enriched data and renders all visualisations client-side. Data lives only in session memory.
+- **Diagnostics-first parsing** — malformed rows are reported as warnings instead of aborting the whole upload. API responses include parser counts, warning details, request IDs, and timing information.
 
 ### Researcher Mode
 - Multi-user listening history analysis and comparison
@@ -82,6 +83,8 @@ See also: `data/research_demo/` for a working metadata example and matching part
 ### Shared Features
 - Pluggable parser registry — add support for new file formats (Spotify, YT Music, CSV, etc.) by dropping in a single parser module
 - Pluggable visualisation registry — add new D3 charts by registering a single JS module
+- Conservative fuzzy matching with confidence scores and unmatched reason categories
+- Date-window filtering with synchronized summary cards and quick presets
 
 ---
 
@@ -152,6 +155,8 @@ See also: `data/research_demo/` for a working metadata example and matching part
 | YT Music | `ytmusic.py` | `watch-history.json` from Google Takeout |
 | Generic CSV | `csv_parser.py` | CSV/TSV with columns: `track`, `artist`, `timestamp`, `ms_played` |
 
+The parsers also accept common variants such as Spotify extended history fields (`ts`, `master_metadata_track_name`, `master_metadata_album_artist_name`, `ms_played`), YouTube Takeout title/subtitle objects, epoch timestamps, and CSV aliases such as `song`, `artists`, `played_at`, and `listened_ms`.
+
 To add a new format, create a parser in `api/parsers/`, subclass `BaseParser`, and register it in `api/registry.py`. No other changes are needed.
 
 ---
@@ -169,8 +174,60 @@ All parsers output a list of `NormalisedEvent` objects. The enricher then attach
 | `valence` | `float \| None` | Valence score from internal dataset (0–1). `null` if track not found. |
 | `arousal` | `float \| None` | Arousal score from internal dataset (0–1). `null` if track not found. |
 | `matched` | `bool` | Whether the track was found in the song dataset |
+| `match_confidence` | `float` | Match confidence from 0–1. Exact matches are `1.0`; fuzzy matches are lower. |
+| `match_method` | `str \| None` | Match strategy such as `exact_pair`, `track_exact_artist_similar`, or `fuzzy_pair`. |
+| `unmatched_reason` | `str \| None` | Reason category such as `not_in_song_dataset`, `artist_mismatch`, `ambiguous_track`, or `below_play_threshold`. |
 
 Unmatched tracks are included in the response but excluded from VA-based visualisations. Match coverage is reported in the API response summary.
+
+---
+
+## API Response Contract
+
+Successful user-mode responses include the historical top-level fields plus an explicit status and diagnostics block:
+
+```json
+{
+  "ok": true,
+  "summary": {
+    "total_events": 120,
+    "matched_count": 91,
+    "match_rate": 0.758,
+    "match_confidence_mean": 0.97,
+    "unmatched_reasons": { "not_in_song_dataset": 20 }
+  },
+  "events": [],
+  "matched_events": [],
+  "reference_groups": {},
+  "diagnostics": {
+    "request_id": "abc123",
+    "elapsed_ms": 24.6,
+    "parse": {
+      "parser": "spotify",
+      "rows_seen": 125,
+      "events_parsed": 120,
+      "rows_dropped": 5,
+      "warnings": []
+    }
+  }
+}
+```
+
+Errors use:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "missing_upload",
+    "message": "Upload a file or request /api/demo.",
+    "status": 400,
+    "request_id": "abc123"
+  }
+}
+```
+
+Uploads are limited to 32 MB by Flask configuration. The backend remains stateless and does not persist uploaded listening histories.
 
 ---
 
@@ -225,6 +282,8 @@ If you do not have an export file yet, click **Load demo session**. The demo use
 python -m pytest
 ```
 
+No JavaScript build step or frontend framework is required. Current runtime dependencies are intentionally small: Flask for the API and pytest for tests; the browser loads D3 directly.
+
 ---
 
 ## Reference Data
@@ -259,7 +318,26 @@ This project is intentionally built to be friendly to change. The main extension
 ### Add a new data format
 
 1. Create a parser in `api/parsers/` that converts the new file into `NormalisedEvent` objects.
-2. Register the parser in `api/registry.py` with a format id and detection rules.
-3. Make sure the parser returns the standard fields used by the enricher and frontend.
+2. Subclass `BaseParser` and implement `parse_with_diagnostics(text, filename=None)`.
+3. Return a `ParseResult` so malformed rows can be surfaced as warnings.
+4. Register the parser in `api/registry.py` with a format id and detection rules.
 
 If you follow those two patterns, the rest of the app should continue working without extra wiring.
+
+---
+
+## Engineering Notes
+
+- Parser robustness: row-level warnings preserve useful data from imperfect exports. Do not raise on a single bad row unless the whole file is unreadable.
+- Matching: exact track+artist matches are preferred; fuzzy matching is intentionally conservative to avoid misleading false positives.
+- Observability: every request receives an `X-Request-ID` response header, structured timing logs, and parse diagnostics in the JSON payload.
+- Performance: cohort reference data and song lookup indexes are cached in process. The backend keeps uploaded datasets in memory only for the request.
+- Frontend state: the active payload is filtered client-side; summary cards, sparklines, and D3 charts read from the same filtered payload to stay synchronized.
+
+## Future Scalability
+
+- Stream very large uploads into temporary row iterators instead of reading the full file into memory.
+- Add optional server-side pagination/downsampling for chart-heavy sessions above roughly 50k events.
+- Move song metadata into SQLite or DuckDB if the internal catalog grows beyond CSV-friendly size.
+- Add golden-file parser fixtures for real Spotify and Google Takeout exports as the supported schema set expands.
+- Add Playwright smoke tests for upload, filtering, and chart tab changes.

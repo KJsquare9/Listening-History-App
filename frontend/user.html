@@ -87,6 +87,16 @@
             </div>
             <div class="cohort-stack" id="cohortStack"></div>
           </section>
+
+          <section class="panel insight-panel">
+            <div class="panel__header">
+              <div>
+                <div class="panel__eyebrow">Diagnostics</div>
+                <h2>Parse quality</h2>
+              </div>
+            </div>
+            <div class="diagnostics-stack" id="diagnosticsStack"></div>
+          </section>
         </aside>
 
         <section class="workspace panel">
@@ -108,6 +118,11 @@
               <input type="date" id="endDateInput" />
             </label>
             <button class="button button--secondary date-filter__reset" type="button" id="resetDateFilter">Full range</button>
+            <div class="date-filter__presets" aria-label="Quick date filters">
+              <button type="button" class="date-filter__preset" data-range-days="7">7d</button>
+              <button type="button" class="date-filter__preset" data-range-days="30">30d</button>
+              <button type="button" class="date-filter__preset" data-range-days="all">All</button>
+            </div>
             <div class="date-filter__message" id="dateFilterMessage"></div>
           </div>
           <div class="chart-frame" id="chartFrame">

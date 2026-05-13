@@ -1,6 +1,9 @@
 import { chartLayout, clearNode, createChartShell, makeTooltip, formatCompact, formatMoodValue, shiftMoodValue } from "./shared.js";
 
+let cleanup = () => {};
+
 export function mount(container, payload) {
+  cleanup();
   clearNode(container);
   const matched = payload.matched_events ?? [];
   const { shell, chart } = createChartShell({
@@ -89,6 +92,7 @@ export function mount(container, payload) {
   svg.append("line").attr("x1", margin.left).attr("x2", margin.left + innerWidth).attr("y1", y(shiftMoodValue(medianArousal))).attr("y2", y(shiftMoodValue(medianArousal))).attr("stroke", "rgba(242,182,109,0.48)").attr("stroke-dasharray", "10 4");
 
   const tooltip = makeTooltip();
+  cleanup = () => tooltip.destroy();
   const points = svg.append("g").selectAll("g").data(matched).enter().append("g").attr("transform", (_, index) => `translate(${x(index)},${y(shiftMoodValue(matched[index].valence))})`);
 
   points
@@ -109,4 +113,7 @@ export function mount(container, payload) {
   tooltip.hide();
 }
 
-export function unmount() {}
+export function unmount() {
+  cleanup();
+  cleanup = () => {};
+}

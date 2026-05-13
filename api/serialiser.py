@@ -11,6 +11,7 @@ def build_response(
     events: list[NormalisedEvent],
     summary: dict[str, Any],
     reference_groups: dict[str, Any],
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     matched_events = [event for event in events if event.matched]
     valences = [event.valence for event in matched_events if event.valence is not None]
@@ -26,8 +27,10 @@ def build_response(
     }
 
     return {
+        "ok": True,
         "summary": summary,
         "events": [event.to_dict() for event in events],
         "matched_events": [event.to_dict() for event in matched_events],
         "reference_groups": reference_groups,
+        "diagnostics": diagnostics or {},
     }

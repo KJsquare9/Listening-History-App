@@ -31,6 +31,7 @@ const elements = {
   uploadState: document.getElementById("uploadState"),
   summaryCards: document.getElementById("summaryCards"),
   cohortStack: document.getElementById("cohortStack"),
+  diagnosticsStack: document.getElementById("diagnosticsStack"),
   tabs: document.getElementById("vizTabs"),
   chartFrame: document.getElementById("chartFrame"),
   emptyState: document.getElementById("emptyState"),
@@ -41,6 +42,7 @@ const elements = {
   endDateInput: document.getElementById("endDateInput"),
   resetDateFilter: document.getElementById("resetDateFilter"),
   dateFilterMessage: document.getElementById("dateFilterMessage"),
+  datePresetButtons: document.querySelectorAll(".date-filter__preset"),
 };
 
 const uploader = bindUploader({
@@ -84,7 +86,7 @@ async function loadDemo() {
   try {
     const response = await fetch("/api/demo");
     if (!response.ok) {
-      throw new Error(`Demo request failed (${response.status})`);
+      throw new Error(await responseErrorMessage(response, "Demo request failed"));
     }
     const payload = await response.json();
     applyPayload(payload, "Demo dataset");
@@ -93,7 +95,7 @@ async function loadDemo() {
   } catch (error) {
     console.error(error);
     uploader.setStatus("Demo load failed");
-    elements.uploadState.textContent = "Error";
+    elements.uploadState.textContent = error.message;
   }
 }
 
@@ -111,7 +113,7 @@ async function uploadFile(file) {
     });
 
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(await responseErrorMessage(response, "Upload failed"));
     }
 
     const payload = await response.json();
@@ -121,7 +123,7 @@ async function uploadFile(file) {
   } catch (error) {
     console.error(error);
     uploader.setStatus("Upload failed");
-    elements.uploadState.textContent = "Failed";
+    elements.uploadState.textContent = error.message;
   }
 }
 
@@ -129,15 +131,17 @@ function applyPayload(payload, sourceLabel) {
   state.payload = payload;
   initializeDateFilterBounds(payload);
   elements.emptyState?.remove();
-  renderSummary(payload, sourceLabel);
+  const filteredPayload = getFilteredPayload(payload);
+  renderSummary(filteredPayload, sourceLabel);
   renderReferenceGroups(payload);
-  renderSparkline(getFilteredPayload(payload));
+  renderDiagnostics(payload);
+  renderSparkline(filteredPayload);
   renderTabs();
   setActiveChart(state.activeId, { preserveTabs: true });
 }
 
 function renderSummary(payload, sourceLabel) {
-  const summary = payload.summary ?? {};
+  const summary = summarizePayload(payload, payload.summary ?? {});
   const cards = [
     { label: "Tracks", value: summary.total_events ?? 0, hint: `Matched ${summary.matched_count ?? 0} of ${summary.total_events ?? 0}` },
     { label: "Match rate", value: formatRatio(summary.match_rate ?? 0), hint: `Source: ${sourceLabel}` },
@@ -155,6 +159,33 @@ function renderSummary(payload, sourceLabel) {
       <span class="stat-card__hint">${card.hint}</span>
     `;
     elements.summaryCards.append(node);
+  });
+}
+
+function renderDiagnostics(payload) {
+  if (!elements.diagnosticsStack) {
+    return;
+  }
+  const parse = payload.diagnostics?.parse ?? {};
+  const warnings = parse.warnings ?? [];
+  const reasons = payload.summary?.unmatched_reasons ?? {};
+  const reasonText = Object.entries(reasons)
+    .map(([reason, count]) => `${reason.replaceAll("_", " ")}: ${count}`)
+    .join(" · ");
+  const warningPreview = warnings.slice(0, 3).map((warning) => warning.row ? `row ${warning.row}: ${warning.message}` : warning.message);
+
+  clearNode(elements.diagnosticsStack);
+  const cards = [
+    ["Parser", parse.parser ?? payload.summary?.format ?? "-"],
+    ["Rows kept", `${parse.events_parsed ?? payload.events?.length ?? 0}/${parse.rows_seen ?? payload.events?.length ?? 0}`],
+    ["Warnings", warnings.length ? warningPreview.join(" · ") : "No parser warnings"],
+    ["Unmatched", reasonText || "No unmatched reason categories"],
+  ];
+  cards.forEach(([label, value]) => {
+    const node = document.createElement("div");
+    node.className = "diagnostic-row";
+    node.innerHTML = `<span>${label}</span><b>${value}</b>`;
+    elements.diagnosticsStack.append(node);
   });
 }
 
@@ -261,6 +292,9 @@ function wireDateFilterControls() {
     setDateFilterMessage(`Showing full range: ${state.dateFilter.minDate} to ${state.dateFilter.maxDate}`);
     refreshVisualsAfterDateFilter();
   });
+  elements.datePresetButtons.forEach((button) => {
+    button.addEventListener("click", () => applyQuickDatePreset(button.dataset.rangeDays));
+  });
 }
 
 function initializeDateFilterBounds(payload) {
@@ -340,8 +374,10 @@ function refreshVisualsAfterDateFilter() {
   if (!state.payload) {
     return;
   }
+  const filteredPayload = getFilteredPayload(state.payload);
+  renderSummary(filteredPayload, elements.fileName?.textContent || "Current dataset");
   setActiveChart(state.activeId, { preserveTabs: true });
-  renderSparkline(getFilteredPayload(state.payload));
+  renderSparkline(filteredPayload);
 }
 
 function getFilteredPayload(payload) {
@@ -356,11 +392,13 @@ function getFilteredPayload(payload) {
     return Number.isFinite(time) && time >= startMs && time <= endMs;
   };
 
-  return {
+  const filtered = {
     ...payload,
     events: (payload.events ?? []).filter(inRange),
     matched_events: (payload.matched_events ?? []).filter(inRange),
   };
+  filtered.summary = summarizePayload(filtered, payload.summary ?? {});
+  return filtered;
 }
 
 function setDateFilterMessage(text, isError = false) {
@@ -380,7 +418,57 @@ function wireResizeHandling() {
       if (state.payload) {
         setActiveChart(state.activeId, { preserveTabs: true });
       }
-      renderSparkline(state.payload);
+      renderSparkline(getFilteredPayload(state.payload));
     }, 120);
   });
+}
+
+function applyQuickDatePreset(rangeDays) {
+  if (!state.dateFilter.available) {
+    return;
+  }
+  if (rangeDays === "all") {
+    elements.resetDateFilter.click();
+    return;
+  }
+  const days = Number(rangeDays);
+  if (!Number.isFinite(days)) {
+    return;
+  }
+  const maxMs = Date.parse(`${state.dateFilter.maxDate}T00:00:00.000Z`);
+  const startMs = Math.max(Date.parse(`${state.dateFilter.minDate}T00:00:00.000Z`), maxMs - (days - 1) * 86400000);
+  state.dateFilter.startDate = toDateInputValue(startMs);
+  state.dateFilter.endDate = state.dateFilter.maxDate;
+  elements.startDateInput.value = state.dateFilter.startDate;
+  elements.endDateInput.value = state.dateFilter.endDate;
+  setDateFilterMessage(`Showing latest ${days} days in this dataset.`);
+  refreshVisualsAfterDateFilter();
+}
+
+function summarizePayload(payload, baseSummary = {}) {
+  const events = payload.events ?? [];
+  const matchedEvents = payload.matched_events ?? events.filter((event) => event.matched);
+  const valences = matchedEvents.map((event) => Number(event.valence)).filter(Number.isFinite);
+  const arousals = matchedEvents.map((event) => Number(event.arousal)).filter(Number.isFinite);
+  const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  return {
+    ...baseSummary,
+    total_events: events.length,
+    matched_count: matchedEvents.length,
+    matched_events: matchedEvents.length,
+    unmatched_events: Math.max(0, events.length - matchedEvents.length),
+    match_rate: events.length ? matchedEvents.length / events.length : 0,
+    total_ms_played: events.reduce((sum, event) => sum + (Number(event.ms_played) || 0), 0),
+    valence_mean: average(valences),
+    arousal_mean: average(arousals),
+  };
+}
+
+async function responseErrorMessage(response, fallback) {
+  try {
+    const payload = await response.json();
+    return payload.error?.message || `${fallback} (${response.status})`;
+  } catch {
+    return `${fallback} (${response.status})`;
+  }
 }

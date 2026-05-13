@@ -109,8 +109,7 @@ async function handleFiles(fileList) {
     });
 
     if (!response.ok) {
-      const error = await safeJson(response);
-      showStatus(error.error || "Backend processing failed.", "error");
+      showStatus(await responseErrorMessage(response, "Backend processing failed."), "error");
       return;
     }
 
@@ -136,8 +135,7 @@ async function loadDemo() {
   try {
     const response = await fetch("/api/researcher/demo");
     if (!response.ok) {
-      const error = await safeJson(response);
-      showStatus(error.error || "Failed to load demo data.", "error");
+      showStatus(await responseErrorMessage(response, "Failed to load demo data."), "error");
       return;
     }
 
@@ -1113,11 +1111,14 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-async function safeJson(response) {
+async function responseErrorMessage(response, fallback) {
   try {
-    return await response.json();
+    const payload = await response.json();
+    if (typeof payload.error === "string") return payload.error;
+    if (payload.error?.message) return payload.error.message;
+    return `${fallback} (${response.status})`;
   } catch {
-    return {};
+    return `${fallback} (${response.status})`;
   }
 }
 
@@ -1134,7 +1135,7 @@ function wireResizeHandling() {
     window.clearTimeout(resizeHandle);
     resizeHandle = window.setTimeout(() => {
       if (state.data) {
-        renderTrajectories(getFilteredData());
+        renderTrajectories(getFilteredResearchData());
       }
     }, 140);
   });
